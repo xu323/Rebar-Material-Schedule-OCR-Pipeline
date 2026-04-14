@@ -1,0 +1,11 @@
+PyMuPDF>=1.24.0
+paddleocr>=3.0.0
+paddlepaddle>=3.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+tqdm>=4.65.0
+
+# Optional: CNN shape classifier backend (--shape-classifier cnn)
+# Install separately if needed:
+#   pip install torch torchvision
