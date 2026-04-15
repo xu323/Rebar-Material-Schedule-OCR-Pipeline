@@ -1,4 +1,4 @@
-# TSG OCR — 鋼筋料單智能提取系統
+# OCR — 鋼筋料單智能提取系統
 
 **[English](./README_en.md) | [中文](./README.md)**
 
