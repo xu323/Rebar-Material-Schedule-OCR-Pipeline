@@ -4,6 +4,10 @@
 
 A complete OCR pipeline for converting rebar material schedule PDFs into structured JSON, with intelligent table detection, merged-cell handling, shape classification, and a browser-based human-in-the-loop review interface.
 
+## DEMO
+
+https://github.com/user-attachments/assets/fd1ed9a8-c4c3-4523-af9b-4f10069d3a2b
+
 ## Overview
 
 This project combines multiple approaches to extract and classify information from construction rebar material schedules:
