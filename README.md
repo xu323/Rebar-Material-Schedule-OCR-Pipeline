@@ -4,6 +4,10 @@
 
 一套完整的 OCR 流程，可將鋼筋施工圖料單 PDF 轉成結構化 JSON，具備智能表格檢測、合併格保留、shape 辨識、以及瀏覽器人工審核介面。
 
+## DEMO
+
+https://github.com/user-attachments/assets/fd1ed9a8-c4c3-4523-af9b-4f10069d3a2b
+
 ## 概述
 
 本專案結合多種技術手段自動提取並分類鋼筋料單資訊：
