@@ -120,8 +120,53 @@ def run_pipeline(
             )
 
             # Phase 2.5: Repair shape column — split false merges
+            # Strategy: try split optimistically, revert if it didn't
+            # improve shape classification confidence.
             repair_log: list[dict] = []
+            original_classifications: dict[int, dict] = {}
             if shape_col_idx is not None:
+                # Classify original merged cells BEFORE split as baseline
+                for gc in grid_cells:
+                    is_shape_col = gc.col == shape_col_idx and gc.colspan == 1
+                    if not is_shape_col or gc.rowspan <= 2:
+                        continue
+                    rt = row_types.get(gc.row, "data")
+                    if rt in ("meta", "col_header", "unit"):
+                        continue
+                    cb = gc.bbox
+                    orig_crop = table_crop[cb.y : cb.y + cb.h, cb.x : cb.x + cb.w]
+                    ocr_data = cell_contents.get((gc.row, gc.col), {})
+                    adj_texts = [
+                        cell_contents.get((oc.row, oc.col), {}).get("text", "")
+                        for oc in grid_cells
+                        if oc.row == gc.row and oc.col != gc.col
+                    ]
+                    orig_shape: dict = {"shape_id": None, "confidence": 0.0}
+                    if is_likely_shape(
+                        orig_crop,
+                        ocr_data.get("text", ""),
+                        ocr_data.get("confidence", 0),
+                        [t for t in adj_texts if t],
+                    ):
+                        orig_matches = classifier.classify(orig_crop)
+                        if orig_matches:
+                            om = orig_matches[0]
+                            orig_shape = {
+                                "shape_id": om.shape_id,
+                                "confidence": om.confidence,
+                                "is_composite": len(orig_matches) > 1,
+                            }
+                            if len(orig_matches) > 1:
+                                orig_shape["components"] = [
+                                    {"shape_id": m.shape_id, "confidence": m.confidence}
+                                    for m in orig_matches
+                                ]
+                    original_classifications[gc.row] = {
+                        "grid_cell": gc,
+                        "cell_contents_entry": dict(ocr_data),
+                        "shape_result": orig_shape,
+                    }
+
                 grid_cells, repair_log = repair_shape_column(
                     grid_cells, shape_col_idx,
                 )
@@ -145,7 +190,6 @@ def run_pipeline(
                     )
                     if not covers_shape_col:
                         continue
-                    # Skip non-data rows using classification
                     rt = row_types.get(gc.row, "data")
                     if rt in ("meta", "col_header", "unit"):
                         continue
@@ -153,7 +197,6 @@ def run_pipeline(
                     cb = gc.bbox
                     cell_crop = table_crop[cb.y : cb.y + cb.h, cb.x : cb.x + cb.w]
 
-                    # Validity check — skip cells that are text/numbers
                     ocr_data = cell_contents.get((gc.row, gc.col), {})
                     adj_texts = [
                         cell_contents.get((oc.row, oc.col), {}).get("text", "")
@@ -166,7 +209,7 @@ def run_pipeline(
                         ocr_data.get("confidence", 0),
                         [t for t in adj_texts if t],
                     ):
-                        continue  # keep OCR text as-is
+                        continue
 
                     matches = classifier.classify(cell_crop)
                     if matches:
@@ -191,12 +234,54 @@ def run_pipeline(
                                 "confidence": round(m.confidence, 3),
                                 "is_composite": False,
                             }
-                    else:
-                        cell_contents[(gc.row, gc.col)] = {
-                            "shape_id": None,
-                            "confidence": 0.0,
-                            "is_composite": False,
-                        }
+                # Phase 3.5: Validate repairs — revert if split didn't improve
+                for entry in repair_log:
+                    orig_gc = entry["original"]
+                    if orig_gc.row not in original_classifications:
+                        continue
+                    orig_info = original_classifications[orig_gc.row]
+                    orig_conf = orig_info["shape_result"].get("confidence", 0.0)
+
+                    split_cells = entry["split_cells"]
+                    best_split_conf = max(
+                        (cell_contents.get((sc.row, sc.col), {})
+                         .get("confidence", 0.0)
+                         for sc in split_cells),
+                        default=0.0,
+                    )
+
+                    if orig_conf >= best_split_conf:
+                        # Revert: remove split cells, restore original
+                        split_positions = {(sc.row, sc.col) for sc in split_cells}
+                        grid_cells = [
+                            gc for gc in grid_cells
+                            if (gc.row, gc.col) not in split_positions
+                        ]
+                        for sc in split_cells:
+                            cell_contents.pop((sc.row, sc.col), None)
+
+                        grid_cells.append(orig_info["grid_cell"])
+                        grid_cells.sort(key=lambda g: (g.row, g.col))
+
+                        orig_shape = orig_info["shape_result"]
+                        if orig_shape.get("shape_id"):
+                            restored = {
+                                "shape_id": orig_shape["shape_id"],
+                                "confidence": round(orig_shape["confidence"], 3),
+                                "is_composite": orig_shape.get("is_composite", False),
+                            }
+                            if orig_shape.get("components"):
+                                restored["components"] = [
+                                    {"shape_id": c["shape_id"],
+                                     "confidence": round(c["confidence"], 3)}
+                                    for c in orig_shape["components"]
+                                ]
+                            cell_contents[(orig_gc.row, shape_col_idx)] = restored
+                        else:
+                            cell_contents[(orig_gc.row, shape_col_idx)] = (
+                                orig_info["cell_contents_entry"]
+                            )
+                        entry["reverted"] = True
 
             table = assemble_page(
                 table_region.bbox, grid_cells, cell_contents, cfg,
@@ -214,6 +299,20 @@ def run_pipeline(
                     repair_log=repair_log,
                     non_table_regions=non_table_results,
                 )
+
+            # Review sidecar: raw page image + grid metadata, required for
+            # re-rendering corrected cells in the human-in-the-loop UI.
+            review_dir = output_path.parent / "review_assets" / f"page_{page_idx}"
+            review_dir.mkdir(parents=True, exist_ok=True)
+            page_png = review_dir / "page.png"
+            if not page_png.exists():
+                cv2.imwrite(str(page_png), page_img)
+            _write_grid_sidecar(
+                review_dir / f"table_{t_idx}_grid.json",
+                grid_cells=grid_cells,
+                table_bbox=table_region.bbox,
+                shape_col_idx=shape_col_idx,
+            )
 
         pages.append(PageResult(
             page_index=page_idx,
@@ -238,6 +337,38 @@ def run_pipeline(
 
     print(f"[5/5] Done in {elapsed}s.")
     return doc
+
+
+# ===================================================================
+# Review sidecar — serializes grid metadata for the HITL review UI
+# ===================================================================
+
+def _write_grid_sidecar(
+    path: Path,
+    *,
+    grid_cells,
+    table_bbox,
+    shape_col_idx: int | None,
+) -> None:
+    """Persist grid-cell geometry + shape column so the review UI can
+    re-render the table after edits without re-running OCR.
+    """
+    data = {
+        "table_bbox": table_bbox.to_dict(),
+        "shape_col_idx": shape_col_idx,
+        "cells": [
+            {
+                "bbox": gc.bbox.to_dict(),
+                "row": gc.row,
+                "col": gc.col,
+                "rowspan": gc.rowspan,
+                "colspan": gc.colspan,
+            }
+            for gc in grid_cells
+        ],
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ===================================================================

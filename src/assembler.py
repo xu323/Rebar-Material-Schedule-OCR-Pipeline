@@ -442,6 +442,38 @@ def _build_semantic(
 # Serialization
 # ===================================================================
 
+# Cells with confidence below this threshold are flagged for human review.
+REVIEW_CONFIDENCE_THRESHOLD = 0.9
+
+
+def _mark_needs_review(cell: dict) -> dict:
+    """Return *cell* with ``needs_review`` set if confidence < threshold.
+
+    Continuation cells of merged regions are not flagged directly;
+    reviewers edit only the anchor cell.
+    """
+    if not isinstance(cell, dict) or not cell:
+        return cell
+    if cell.get("is_continuation"):
+        return cell
+    has_text = bool((cell.get("text") or "").strip())
+    has_shape = bool(cell.get("shape_id"))
+    has_components = bool(cell.get("components"))
+    if not (has_text or has_shape or has_components):
+        return cell
+    conf = cell.get("confidence")
+    if conf is None:
+        return cell
+    try:
+        needs = float(conf) < REVIEW_CONFIDENCE_THRESHOLD
+    except (TypeError, ValueError):
+        return cell
+    if needs:
+        cell = dict(cell)
+        cell["needs_review"] = True
+    return cell
+
+
 def document_to_dict(doc: DocumentResult) -> dict:
     return {
         "source_pdf": doc.source_pdf,
@@ -477,7 +509,10 @@ def _table_to_dict(table: Table) -> dict:
             {
                 "index": row.index,
                 "row_type": row.row_type,
-                "cells": row.cells,
+                "cells": {
+                    col: _mark_needs_review(cell)
+                    for col, cell in row.cells.items()
+                },
                 "merge_info": row.merge_info,
             }
             for row in table.rows

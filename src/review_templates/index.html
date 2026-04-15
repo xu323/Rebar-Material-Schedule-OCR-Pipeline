@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TSG OCR 人工審核</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "PingFang TC", -apple-system,
+                   BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fa;
+      color: #1a202c;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px;
+      background: #2d3748;
+      color: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      flex: 1;
+    }
+    header .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    header select, header button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    header select {
+      background: #fff;
+      color: #1a202c;
+    }
+    header button {
+      cursor: pointer;
+      background: #3182ce;
+      color: #fff;
+      font-weight: 600;
+    }
+    header button:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+    header .status {
+      margin-left: 8px;
+      font-size: 13px;
+      color: #cbd5e0;
+    }
+    main {
+      display: flex;
+      height: calc(100vh - 56px);
+    }
+    .pane {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+    }
+    .pane.left {
+      background: #edf2f7;
+      border-right: 1px solid #cbd5e0;
+    }
+    .pane.right {
+      background: #fff;
+    }
+    .pane h2 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #4a5568;
+    }
+    .image-box {
+      margin-bottom: 16px;
+      padding: 8px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .image-box img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .ocr-region {
+      margin: 0 0 12px 0;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .ocr-region.edited {
+      background: #d1fae5;
+      outline: 2px solid #10b981;
+      outline-offset: -2px;
+    }
+    .ocr-region-editor {
+      width: 100%;
+      min-height: 32px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      resize: vertical;
+    }
+    .ocr-region-editor:focus {
+      outline: 2px solid #3182ce;
+      background: #fff;
+    }
+    .grid-table {
+      display: grid;
+      margin-bottom: 20px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      background: #fff;
+      overflow-x: auto;
+    }
+    .grid-cell {
+      min-width: 0;
+      padding: 4px 6px;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .grid-cell.meta { background: #e8eef4; }
+    .grid-cell.col_header { background: #d0d8e0; font-weight: 600; }
+    .grid-cell.unit { background: #e0e4e8; font-style: italic; }
+    .grid-cell.summary { background: #fff3e0; }
+    .grid-cell.shape-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .grid-cell.shape-cell img {
+      max-width: 120px;
+      max-height: 60px;
+    }
+    .grid-cell.needs-review {
+      background: #fef3c7 !important;
+      outline: 2px solid #f59e0b;
+      outline-offset: -2px;
+    }
+    .grid-cell.edited {
+      background: #d1fae5 !important;
+      outline: 2px solid #10b981;
+      outline-offset: -2px;
+    }
+    .cell-editor {
+      width: 100%;
+      min-height: 24px;
+      padding: 2px 4px;
+      border: none;
+      background: transparent;
+      font: inherit;
+      resize: vertical;
+    }
+    .cell-editor:focus {
+      outline: 2px solid #3182ce;
+      background: #fff;
+    }
+    .confidence-badge {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      color: #718096;
+    }
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      padding: 10px 16px;
+      border-radius: 4px;
+      background: #2d3748;
+      color: #fff;
+      font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #c53030; }
+    .toast.success { background: #2f855a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TSG OCR 人工審核</h1>
+    <div class="controls">
+      <label for="pageSelect" style="font-size:13px">頁面</label>
+      <select id="pageSelect"></select>
+      <span class="status" id="statusText">載入中</span>
+      <button id="saveBtn" disabled>確認並重新渲染</button>
+    </div>
+  </header>
+  <main>
+    <section class="pane left">
+      <h2>原始頁面影像</h2>
+      <div class="image-box">
+        <img id="pageImage" alt="page image">
+      </div>
+      <h2>檢測結果</h2>
+      <div id="renderedImages"></div>
+    </section>
+    <section class="pane right">
+      <h2>可編輯結果</h2>
+      <div id="pageBody"></div>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const state = {
+      document: null,
+      currentPage: 0,
+      edits: new Map(),
+    };
+
+    function editKey(p, t, r, c) {
+      return `${p}|${t}|${r}|${c}`;
+    }
+
+    function nonTableEditKey(p, regionIdx) {
+      return `ntr|${p}|${regionIdx}`;
+    }
+
+    function rowCellByColumnIndex(table, row, columnIndex) {
+      const columns = table.columns || [];
+      const cells = row.cells || {};
+      if (columnIndex >= 0 && columnIndex < columns.length) {
+        const cell = cells[columns[columnIndex]];
+        if (cell !== undefined) return cell;
+      }
+      const values = Object.values(cells);
+      return (columnIndex >= 0 && columnIndex < values.length)
+        ? values[columnIndex]
+        : {};
+    }
+
+    function hasReviewableContent(cell) {
+      if (!cell || typeof cell !== "object") return false;
+      if (cell.shape_id) return true;
+      if (Array.isArray(cell.components) && cell.components.length > 0) return true;
+      return Boolean((cell.text || "").trim());
+    }
+
+    function shouldHighlightReview(cell) {
+      return Boolean(cell && cell.needs_review && hasReviewableContent(cell));
+    }
+
+    function setStatus(text) {
+      document.getElementById("statusText").textContent = text;
+    }
+
+    function showToast(message, kind = "") {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.className = `toast show ${kind}`;
+      setTimeout(() => { el.className = "toast"; }, 3000);
+    }
+
+    function updateSaveButton() {
+      const btn = document.getElementById("saveBtn");
+      const count = state.edits.size;
+      btn.disabled = count === 0;
+      btn.textContent = count > 0
+        ? `確認並重新渲染 (${count})`
+        : "確認並重新渲染";
+    }
+
+    async function loadResult() {
+      setStatus("載入中");
+      const resp = await fetch("/api/result");
+      const data = await resp.json();
+      state.document = data.document;
+      state.edits.clear();
+      renderPageSelect();
+      await renderPage(state.currentPage);
+      setStatus(data.is_reviewed ? "已載入人工修正版" : `共 ${state.document.total_pages} 頁`);
+      updateSaveButton();
+    }
+
+    function renderPageSelect() {
+      const sel = document.getElementById("pageSelect");
+      sel.innerHTML = "";
+      for (const page of state.document.pages) {
+        const opt = document.createElement("option");
+        opt.value = page.page_index;
+        opt.textContent = `第 ${page.page_index + 1} 頁`;
+        sel.appendChild(opt);
+      }
+      sel.value = state.currentPage;
+      sel.onchange = async () => {
+        state.currentPage = parseInt(sel.value, 10);
+        await renderPage(state.currentPage);
+      };
+    }
+
+    async function renderPage(pageIdx) {
+      const page = state.document.pages.find(p => p.page_index === pageIdx);
+      if (!page) return;
+
+      const bust = Date.now();
+      document.getElementById("pageImage").src = `/api/page_image/${pageIdx}?t=${bust}`;
+
+      const renderedContainer = document.getElementById("renderedImages");
+      renderedContainer.innerHTML = "";
+      page.tables.forEach((_, tableIdx) => {
+        const box = document.createElement("div");
+        box.className = "image-box";
+        const img = document.createElement("img");
+        img.src = `/api/rendered/${pageIdx}/${tableIdx}?t=${bust}`;
+        img.alt = `rendered table ${tableIdx}`;
+        box.appendChild(img);
+        renderedContainer.appendChild(box);
+      });
+
+      const body = document.getElementById("pageBody");
+      body.innerHTML = "";
+
+      (page.non_table_regions || []).forEach((ntr, regionIdx) => {
+        renderNonTableRegion(body, ntr, pageIdx, regionIdx);
+      });
+
+      for (let tableIdx = 0; tableIdx < page.tables.length; tableIdx++) {
+        await renderTable(body, page, page.tables[tableIdx], tableIdx);
+      }
+    }
+
+    function renderNonTableRegion(container, region, pageIdx, regionIdx) {
+      const key = nonTableEditKey(pageIdx, regionIdx);
+      const current = state.edits.get(key);
+      const text = current !== undefined ? current.text : (region.text || "");
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "ocr-region";
+      if (state.edits.has(key)) wrapper.classList.add("edited");
+
+      const ta = document.createElement("textarea");
+      ta.className = "ocr-region-editor";
+      ta.rows = 1;
+      ta.value = text;
+      ta.placeholder = "OCR text";
+      ta.addEventListener("input", () => {
+        const original = region.text || "";
+        if (ta.value === original) {
+          state.edits.delete(key);
+          wrapper.classList.remove("edited");
+        } else {
+          state.edits.set(key, {
+            page_index: pageIdx,
+            non_table_region_index: regionIdx,
+            text: ta.value,
+          });
+          wrapper.classList.add("edited");
+        }
+        updateSaveButton();
+      });
+      wrapper.appendChild(ta);
+
+      if (typeof region.confidence === "number") {
+        const badge = document.createElement("span");
+        badge.className = "confidence-badge";
+        badge.textContent = `conf ${region.confidence.toFixed(2)}`;
+        wrapper.appendChild(badge);
+      }
+
+      container.appendChild(wrapper);
+    }
+
+    async function renderTable(container, page, table, tableIdx) {
+      const pageIdx = page.page_index;
+      let gridData = null;
+
+      try {
+        const resp = await fetch(`/api/grid/${pageIdx}/${tableIdx}`);
+        if (resp.ok) gridData = await resp.json();
+      } catch (e) {
+        gridData = null;
+      }
+
+      if (!gridData) {
+        renderTableLegacy(container, page, table, tableIdx);
+        return;
+      }
+
+      const shapeColIdx = gridData.shape_col_idx;
+      const gridCells = gridData.cells || [];
+      const rowTypes = {};
+      const rowsByIndex = Object.fromEntries(
+        (table.rows || []).map(row => {
+          rowTypes[row.index] = row.row_type || "data";
+          return [row.index, row];
+        }),
+      );
+
+      const colWidths = {};
+      for (const gc of gridCells) {
+        if (gc.colspan === 1 && gc.bbox && gc.bbox.w > 0) {
+          if (!(gc.col in colWidths) || gc.bbox.w > colWidths[gc.col]) {
+            colWidths[gc.col] = gc.bbox.w;
+          }
+        }
+      }
+
+      const maxCol = Math.max(...gridCells.map(gc => gc.col + gc.colspan - 1));
+      const wrapper = document.createElement("div");
+      wrapper.className = "grid-table";
+      wrapper.style.gridTemplateColumns = Array.from(
+        { length: maxCol + 1 },
+        (_, c) => `${colWidths[c] || 100}fr`,
+      ).join(" ");
+
+      for (const gc of gridCells) {
+        const row = rowsByIndex[gc.row] || {};
+        const cell = rowCellByColumnIndex(table, row, gc.col);
+        const rowType = rowTypes[gc.row] || "data";
+        const div = document.createElement("div");
+        div.className = `grid-cell ${rowType}`;
+        div.style.gridRow = `${gc.row + 1} / span ${gc.rowspan}`;
+        div.style.gridColumn = `${gc.col + 1} / span ${gc.colspan}`;
+
+        const isShapeWidget = (
+          rowType === "data" &&
+          shapeColIdx !== null &&
+          gc.col === shapeColIdx &&
+          gc.colspan === 1
+        );
+
+        if (shouldHighlightReview(cell)) div.classList.add("needs-review");
+        if (state.edits.has(editKey(pageIdx, tableIdx, gc.row, gc.col))) {
+          div.classList.add("edited");
+        }
+
+        if (isShapeWidget) {
+          div.classList.add("shape-cell");
+          renderShapeCell(div, cell, pageIdx, tableIdx, gc.row, gc.col);
+        } else {
+          renderTextCell(div, cell, pageIdx, tableIdx, gc.row, gc.col);
+        }
+
+        wrapper.appendChild(div);
+      }
+
+      container.appendChild(wrapper);
+    }
+
+    function renderTableLegacy(container, page, table, tableIdx) {
+      const pageIdx = page.page_index;
+      const wrapper = document.createElement("div");
+      wrapper.className = "grid-table";
+      wrapper.style.gridTemplateColumns = `repeat(${(table.columns || []).length}, 1fr)`;
+
+      const shapeColIdx = table.semantic ? table.semantic.shape_column_index : null;
+
+      for (const row of table.rows || []) {
+        for (let cIdx = 0; cIdx < (table.columns || []).length; cIdx++) {
+          const cell = rowCellByColumnIndex(table, row, cIdx);
+          if (cell.is_continuation) continue;
+
+          const rowType = row.row_type || "data";
+          const div = document.createElement("div");
+          div.className = `grid-cell ${rowType}`;
+          div.style.gridRow = `${row.index + 1} / span ${cell.rowspan || 1}`;
+          div.style.gridColumn = `${cIdx + 1} / span ${cell.colspan || 1}`;
+
+          const isShapeWidget = (
+            rowType === "data" &&
+            shapeColIdx !== null &&
+            cIdx === shapeColIdx &&
+            (cell.colspan || 1) === 1
+          );
+
+          if (shouldHighlightReview(cell)) div.classList.add("needs-review");
+          if (state.edits.has(editKey(pageIdx, tableIdx, row.index, cIdx))) {
+            div.classList.add("edited");
+          }
+
+          if (isShapeWidget) {
+            div.classList.add("shape-cell");
+            renderShapeCell(div, cell, pageIdx, tableIdx, row.index, cIdx);
+          } else {
+            renderTextCell(div, cell, pageIdx, tableIdx, row.index, cIdx);
+          }
+
+          wrapper.appendChild(div);
+        }
+      }
+
+      container.appendChild(wrapper);
+    }
+
+    function renderTextCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx) {
+      const key = editKey(pageIdx, tableIdx, rowIdx, colIdx);
+      const current = state.edits.get(key);
+      const text = current !== undefined ? current.text : (cell.text || "");
+
+      const ta = document.createElement("textarea");
+      ta.className = "cell-editor";
+      ta.rows = 1;
+      ta.value = text;
+      ta.addEventListener("input", () => {
+        const original = cell.text || "";
+        if (ta.value === original && !shouldHighlightReview(cell)) {
+          state.edits.delete(key);
+          target.classList.remove("edited");
+        } else if (ta.value !== original) {
+          state.edits.set(key, {
+            page_index: pageIdx,
+            table_index: tableIdx,
+            row_index: rowIdx,
+            column_index: colIdx,
+            text: ta.value,
+          });
+          target.classList.add("edited");
+        }
+        updateSaveButton();
+      });
+      target.appendChild(ta);
+
+      if (typeof cell.confidence === "number") {
+        const badge = document.createElement("span");
+        badge.className = "confidence-badge";
+        badge.textContent = `conf ${cell.confidence.toFixed(2)}`;
+        target.appendChild(badge);
+      }
+    }
+
+    function renderShapeCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx) {
+      const key = editKey(pageIdx, tableIdx, rowIdx, colIdx);
+      const current = state.edits.get(key);
+      const shapeId = current !== undefined && "shape_id" in current
+        ? current.shape_id
+        : (cell.shape_id || "");
+
+      if (shapeId) {
+        const img = document.createElement("img");
+        img.src = `/api/shape/${shapeId}`;
+        img.alt = shapeId;
+        target.appendChild(img);
+      }
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "cell-editor";
+      input.value = shapeId;
+      input.placeholder = "shape_XX";
+      input.addEventListener("input", () => {
+        const original = cell.shape_id || "";
+        if (input.value === original && !shouldHighlightReview(cell)) {
+          state.edits.delete(key);
+          target.classList.remove("edited");
+        } else if (input.value !== original) {
+          state.edits.set(key, {
+            page_index: pageIdx,
+            table_index: tableIdx,
+            row_index: rowIdx,
+            column_index: colIdx,
+            shape_id: input.value,
+          });
+          target.classList.add("edited");
+        }
+        updateSaveButton();
+      });
+      target.appendChild(input);
+
+      if (typeof cell.confidence === "number") {
+        const badge = document.createElement("span");
+        badge.className = "confidence-badge";
+        badge.textContent = `conf ${cell.confidence.toFixed(2)}`;
+        target.appendChild(badge);
+      }
+    }
+
+    async function saveEdits() {
+      if (state.edits.size === 0) return;
+      const btn = document.getElementById("saveBtn");
+      btn.disabled = true;
+      setStatus("儲存中");
+
+      try {
+        const resp = await fetch("/api/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ edits: Array.from(state.edits.values()) }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        showToast(`已套用 ${data.applied_edits} 筆修改`, "success");
+        await loadResult();
+      } catch (err) {
+        showToast(`儲存失敗: ${err.message}`, "error");
+        setStatus("儲存失敗");
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", saveEdits);
+    loadResult();
+  </script>
+</body>
+</html>
