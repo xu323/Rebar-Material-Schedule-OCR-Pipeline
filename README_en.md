@@ -1,6 +1,6 @@
 # OCR — Rebar Material Schedule Extract
 
-**[中文](./README.md) | ［English］(./README_en.md)**
+**[中文](./README.md) | [English](./README_en.md)**
 
 A complete OCR pipeline for converting rebar material schedule PDFs into structured JSON, with intelligent table detection, merged-cell handling, shape classification, and a browser-based human-in-the-loop review interface.
 
