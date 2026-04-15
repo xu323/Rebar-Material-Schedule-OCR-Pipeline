@@ -33,14 +33,36 @@ def _write_shape(path: Path, kind: str) -> None:
     cv2.imwrite(str(path), img)
 
 
+class ShapeClassifierTemplateTests(unittest.TestCase):
+    def test_template_backend_registry_is_available(self) -> None:
+        self.assertIsNotNone(get_classifier("template"))
+
+    def test_template_backend_classifies_simple_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            shapes_dir = Path(td) / "shapes"
+            shapes_dir.mkdir()
+            _write_shape(shapes_dir / "shape_20.png", "line")
+            _write_shape(shapes_dir / "shape_32.png", "hook")
+
+            classifier = get_classifier("template", threshold=0.0)
+            classifier.load_templates(shapes_dir)
+
+            image = cv2.imread(str(shapes_dir / "shape_20.png"), cv2.IMREAD_GRAYSCALE)
+            self.assertIsNotNone(image)
+            matches = classifier.classify(image)
+            self.assertTrue(matches)
+            self.assertEqual(matches[0].shape_id, "shape_20")
+
+
 @unittest.skipUnless(HAS_TORCH, "torch is required for CNN backend tests")
 class ShapeClassifierBackendTests(unittest.TestCase):
-    def test_registry_exposes_template_cnn_and_embed(self) -> None:
-        self.assertIsNotNone(get_classifier("template"))
+    def test_cnn_backend_registry_is_available(self) -> None:
         self.assertIsNotNone(get_classifier("cnn", checkpoint_path="dummy.pt"))
+
+    def test_embed_backend_registry_is_available(self) -> None:
         self.assertIsNotNone(get_classifier("embed"))
 
-    def test_checkpoint_class_map_round_trip(self) -> None:
+    def test_cnn_backend_checkpoint_class_map_round_trip(self) -> None:
         import torch
 
         with tempfile.TemporaryDirectory() as td:
@@ -62,14 +84,14 @@ class ShapeClassifierBackendTests(unittest.TestCase):
             self.assertEqual(loaded.idx_to_class[1], "shape_32")
             self.assertEqual(loaded.model.classifier[-1].out_features, 3)
 
-    def test_model_scales_to_200_classes(self) -> None:
+    def test_cnn_backend_model_scales_to_200_classes(self) -> None:
         import torch
 
         model = ShapeCNN(num_classes=200)
         logits = model(torch.randn(2, 1, 128, 128))
         self.assertEqual(tuple(logits.shape), (2, 200))
 
-    def test_manifest_can_represent_200_classes(self) -> None:
+    def test_cnn_backend_manifest_can_represent_200_classes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             image = root / "sample.png"
@@ -93,7 +115,7 @@ class ShapeClassifierBackendTests(unittest.TestCase):
             self.assertEqual(len(dataset.class_to_idx), 200)
             self.assertEqual(dataset.idx_to_class[199], "shape_199")
 
-    def test_cnn_does_not_hard_reject_disconnected_shapes(self) -> None:
+    def test_cnn_backend_does_not_hard_reject_disconnected_shapes(self) -> None:
         import torch
 
         with tempfile.TemporaryDirectory() as td:
@@ -120,7 +142,7 @@ class ShapeClassifierBackendTests(unittest.TestCase):
             if matches:
                 self.assertIn(matches[0].shape_id, {"shape_20", "shape_32"})
 
-    def test_build_dataset_and_train_smoke_epoch(self) -> None:
+    def test_cnn_backend_build_dataset_and_train_smoke_epoch(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             shapes_dir = root / "shapes"
@@ -159,6 +181,22 @@ class ShapeClassifierBackendTests(unittest.TestCase):
             self.assertTrue(Path(result["checkpoint_path"]).exists())
             loaded = LoadedShapeCNN(Path(result["checkpoint_path"]))
             self.assertEqual(len(loaded.class_to_idx), 2)
+
+    def test_embed_backend_loads_templates_and_classifies(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            shapes_dir = Path(td) / "shapes"
+            shapes_dir.mkdir()
+            _write_shape(shapes_dir / "shape_20.png", "line")
+            _write_shape(shapes_dir / "shape_32.png", "hook")
+
+            classifier = get_classifier("embed", threshold=0.0)
+            classifier.load_templates(shapes_dir)
+
+            image = cv2.imread(str(shapes_dir / "shape_20.png"), cv2.IMREAD_GRAYSCALE)
+            self.assertIsNotNone(image)
+            matches = classifier.classify(image)
+            self.assertTrue(matches)
+            self.assertIn(matches[0].shape_id, {"shape_20", "shape_32"})
 
 
 if __name__ == "__main__":
