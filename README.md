@@ -1,30 +1,46 @@
-# OCR
+# TSG OCR — Rebar Material Schedule Extract
 
-English | [中文](#中文說明)
+[中文文檔](./README_zh.md) | **English**
 
-This OCR converts rebar material schedule PDFs into structured JSON, classifies
-rebar shapes, generates debug renders, and provides a browser-based review UI.
-The project now includes two independent shape-classification paths:
+A complete OCR pipeline for converting rebar material schedule PDFs into structured JSON, with intelligent table detection, merged-cell handling, shape classification, and a browser-based human-in-the-loop review interface.
 
-- `template`: the original template-matching backend
-- `cnn`: a trainable supervised CNN backend for CPU training/inference
-- `embed`: the older experimental embedding-based backend
+## Overview
 
-`template` remains the default and is not modified by the CNN workflow.
+This project combines multiple approaches to extract and classify information from construction rebar material schedules:
 
-## Features
+- **Template Matching**: Original robust shape classifier (default backend)
+- **CNN**: Trainable supervised CNN for improved shape recognition
 
-- PDF rasterization with PyMuPDF
-- Layout detection for table and non-table regions
-- Table grid extraction with merged-cell support
-- OCR for table cells and non-table regions
-- Template-matching shape classification
-- Supervised CNN shape classification with PyTorch checkpoints
-- Faithful table re-rendering and review sidecars
-- Browser review UI for editing OCR text, shape IDs, and non-table OCR regions
-- Debug outputs for layout, grid, render, and shape diagnostics
+## Key Features
+
+### OCR & Table Extraction
+- PDF rasterization at configurable DPI (default 300)
+- Automatic layout detection (tables vs. non-table regions)
+- Table grid extraction with full merged-cell (`rowspan`/`colspan`) support
+- Cell-level OCR with confidence scoring
+- Multi-page document handling
+
+### Shape Classification
+- **Template matching** (default): Robust pixel-based correlation with composite detection
+- **CNN**: PyTorch-based supervised learning with CPU training/inference
+
+### Review & Validation
+- Faithful table re-rendering using grid metadata
+- Browser-based review UI for human-in-the-loop editing
+- Edit tracking with anchor-based cell identity (stable across column renames)
+- Per-table rendered previews with per-edit refresh
+- Batch editing and confidence visualization
+
+### Debug & Diagnostics
+- Layout region overlays (01_layout.png)
+- Cell grid visualization with merged-cell markers (02_table_<j>_grid.png)
+- Faithful rendered table reconstruction (03_table_<j>_rendered.png)
+- Shape repair verification overlays (04_table_<j>_repair.png)
+- Shape diagnostic CLI tools
 
 ## Installation
+
+### Basic Installation
 
 ```bash
 python -m venv .venv
@@ -32,7 +48,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Optional CNN dependencies:
+### Optional CNN/Embedding Support
 
 ```bash
 pip install torch torchvision
@@ -40,313 +56,256 @@ pip install torch torchvision
 
 ## Quick Start
 
-Run the default template-based pipeline:
+### 1. Run the Default Pipeline
 
 ```bash
-python scripts/run_pipeline.py --pdf data/鋼筋施工圖料單明細表單.pdf --out output/result.json --debug
+python scripts/run_pipeline.py \
+  --pdf data/鋼筋施工圖料單明細表單.pdf \
+  --debug
 ```
 
-Launch the review UI:
+Outputs:
+- `output/result.json` — structured OCR results
+- `output/debug/page_<i>/` — layout, grid, render, and repair visualizations
+- `output/review_assets/page_<i>/` — review sidecar and original page image
+
+### 2. Launch the Review UI
 
 ```bash
 python scripts/review.py --result output/result.json
 ```
 
-Open:
-
-```text
+Then open:
+```
 http://127.0.0.1:5000
 ```
 
-## CLI
+**Features:**
+- View page images with per-table rendered reconstructions
+- Edit cell text and shape IDs directly in the browser
+- See confidence scores and needs-review flags
+- Batch save edits with automatic re-rendering
+- Track edits with visual highlights
+
+## CLI Reference
 
 ### OCR Pipeline
 
 ```bash
-python scripts/run_pipeline.py --pdf <input.pdf> [--out output/result.json] [--debug] [--dpi 300] [--shape-classifier template]
+python scripts/run_pipeline.py \
+  --pdf <input.pdf> \
+  [--out output/result.json] \
+  [--debug] \
+  [--dpi 300] \
+  [--shape-classifier template|cnn|embed] \
+  [--cnn-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt]
 ```
 
-Arguments:
-
-- `--pdf`: input PDF path
-- `--out`: output JSON path, default `output/result.json`
-- `--debug`: save debug images under `output/debug/`
-- `--dpi`: rasterization DPI, default `300`
-- `--shape-classifier`: `template`, `cnn`, or `embed`
-- `--cnn-checkpoint`: required when `--shape-classifier cnn`
+**Options:**
+- `--pdf` — Input PDF path (required)
+- `--out` — Output JSON path (default: `output/result.json`)
+- `--debug` — Save debug visualizations (layout, grid, render)
+- `--dpi` — Rasterization DPI (default: 300)
+- `--shape-classifier` — Which backend to use (default: `template`)
+- `--cnn-checkpoint` — Required when `--shape-classifier cnn`
 
 ### Review UI
 
 ```bash
-python scripts/review.py --result output/result.json
+python scripts/review.py \
+  --result output/result.json \
+  [--host 127.0.0.1] \
+  [--port 5000]
 ```
 
-### Shape Diagnostics
+### Shape Classification
 
+**Diagnose shape classification:**
 ```bash
 python scripts/diagnose_shapes.py
 ```
 
 ## CNN Workflow
 
-The supervised CNN backend is intentionally isolated from the template backend.
-It uses its own dataset builder, checkpoint format, and inference path.
+The supervised CNN backend is fully isolated from the template backend. You can train, evaluate, and deploy it independently.
 
-### 1. Build a synthetic dataset from templates
+### 1. Generate Synthetic Dataset
 
 ```bash
-python scripts/build_shape_dataset.py --out-dir artifacts/shape_cnn/datasets/generated
+python scripts/build_shape_dataset.py \
+  --out-dir artifacts/shape_cnn/datasets/generated
 ```
+
+Creates `manifest.json` linking each shape template to synthetic training examples.
 
 ### 2. Train on CPU
 
 ```bash
-python scripts/train_shape_cnn.py ^
-  --manifest artifacts/shape_cnn/datasets/generated/manifest.json ^
-  --out-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt ^
-  --device cpu
+python scripts/train_shape_cnn.py \
+  --manifest artifacts/shape_cnn/datasets/generated/manifest.json \
+  --out-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt \
+  [--device cpu] \
+  [--epochs 50]
 ```
 
-### 3. Evaluate
+Training includes per-epoch loss/accuracy reporting and tqdm progress bars.
+
+### 3. Evaluate & Calibrate Threshold
 
 ```bash
-python scripts/eval_shape_cnn.py ^
-  --manifest artifacts/shape_cnn/datasets/generated/manifest.json ^
-  --checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt ^
-  --split test
+python scripts/eval_shape_cnn.py \
+  --manifest artifacts/shape_cnn/datasets/generated/manifest.json \
+  --checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt \
+  --split val
 ```
 
-### 4. Run OCR pipeline with CNN backend
+Output shows:
+- Per-shape precision/recall
+- Current checkpoint threshold
+- **Recommended threshold** (optimized for F1 on validation set)
+
+To write the recommended threshold back to the checkpoint:
 
 ```bash
-python scripts/run_pipeline.py ^
-  --pdf data/鋼筋施工圖料單明細表單.pdf ^
-  --out output/result.json ^
-  --debug ^
-  --shape-classifier cnn ^
+python scripts/eval_shape_cnn.py \
+  --manifest artifacts/shape_cnn/datasets/generated/manifest.json \
+  --checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt \
+  --split val \
+  --write-threshold-to-checkpoint
+```
+
+This saves the auto-calibrated threshold so future inference uses it automatically.
+
+### 4. Run OCR with CNN Backend
+
+```bash
+python scripts/run_pipeline.py \
+  --pdf data/鋼筋施工圖料單明細表單.pdf \
+  --debug \
+  --shape-classifier cnn \
   --cnn-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt
-
 ```
 
 ## Project Structure
 
-```text
+```
 TSG_OCR/
-├─ data/
-│  ├─ shapes/
-│  └─ *.pdf
-├─ scripts/
-│  ├─ build_shape_dataset.py
-│  ├─ diagnose_shapes.py
-│  ├─ eval_shape_cnn.py
-│  ├─ review.py
-│  ├─ run_pipeline.py
-│  └─ train_shape_cnn.py
+├─ data/                          # Input PDFs and shape template images
+│  ├─ 鋼筋施工圖料單明細表單.pdf   # Sample rebar schedule PDF
+│  └─ shapes/                     # Shape template PNG files (shape_00.png, etc.)
+│
+├─ scripts/                        # CLI entry points
+│  ├─ run_pipeline.py             # Main OCR pipeline
+│  ├─ review.py                   # Browser review UI launcher
+│  ├─ train_shape_cnn.py          # CNN training entrypoint
+│  ├─ eval_shape_cnn.py           # CNN evaluation & threshold calibration
+│  ├─ build_shape_dataset.py      # Synthetic dataset generator
+│  └─ diagnose_shapes.py          # Shape classification diagnostics
+│
 ├─ src/
-│  ├─ pipeline.py
-│  ├─ review_server.py
-│  ├─ review_renderer.py
-│  ├─ shape_column_repair.py
-│  └─ shape_classifier/
-│     ├─ base.py
-│     ├─ cnn_classifier.py
-│     ├─ cnn_dataset.py
-│     ├─ cnn_dataset_builder.py
-│     ├─ cnn_infer.py
-│     ├─ cnn_model.py
-│     ├─ cnn_train.py
-│     ├─ cnn_transforms.py
-│     ├─ embed_classifier.py
-│     ├─ registry.py
-│     └─ template_matcher.py
-├─ tests/
-├─ output/
-└─ artifacts/shape_cnn/         # generated at runtime, ignored by git
+│  ├─ pipeline.py                 # Main OCR orchestrator
+│  ├─ review_server.py            # Flask review UI backend
+│  ├─ review_renderer.py          # Table re-rendering from edits
+│  ├─ ocr_engine.py               # PaddleOCR wrapper
+│  ├─ pdf_rasterizer.py           # PyMuPDF PDF→image
+│  ├─ layout_analyzer.py          # Layout detection
+│  ├─ table_cell_segmenter.py     # Table grid extraction
+│  ├─ shape_column_repair.py      # Fix split merged cells in shape columns
+│  ├─ assembler.py                # Assemble OCR results into JSON
+│  ├─ config.py                   # Configuration & paths
+│  ├─ debug_visualizer.py         # Debug image generation
+│  ├─ models.py                   # Data classes (BBox, GridCell, etc.)
+│  └─ shape_classifier/           # Shape classification backends
+│     ├─ base.py                  # Abstract classifier interface
+│     ├─ template_matcher.py      # Template matching (default)
+│     ├─ cnn_classifier.py        # CNN inference wrapper
+│     ├─ cnn_infer.py             # Low-level CNN inference
+│     ├─ cnn_model.py             # PyTorch CNN model definition
+│     ├─ cnn_train.py             # CNN training logic
+│     ├─ cnn_dataset.py           # CNN training dataset class
+│     ├─ cnn_dataset_builder.py   # Synthetic dataset generator
+│     ├─ cnn_transforms.py        # Image augmentations
+│     ├─ embed_classifier.py      # Embedding-based (legacy)
+│     └─ registry.py              # Classifier factory
+│
+├─ tests/                          # Unit tests
+├─ output/                         # Pipeline outputs (created at runtime)
+├─ artifacts/                      # CNN artifacts (created at runtime)
+└─ requirements.txt
 ```
 
 ## Output Files
 
-Main outputs:
+### Main Pipeline Output
+- `output/result.json` — Structured OCR results (pages, tables, cells)
+- `output/debug/page_<i>/01_layout.png` — Layout regions overlay
+- `output/debug/page_<i>/02_table_<j>_grid.png` — Cell grid visualization
+- `output/debug/page_<i>/03_table_<j>_rendered.png` — Faithful table render
+- `output/debug/page_<i>/04_table_<j>_repair.png` — Repair verification (if needed)
 
-- `output/result.json`
-- `output/debug/page_<i>/01_layout.png`
-- `output/debug/page_<i>/02_table_<j>_grid.png`
-- `output/debug/page_<i>/03_table_<j>_rendered.png`
+### Review Workflow Outputs
+- `output/review_assets/page_<i>/page.png` — Original rasterized page
+- `output/review_assets/page_<i>/table_<j>_grid.json` — Grid metadata (columns, row_types, cells)
+- `output/result_reviewed.json` — Edited JSON after review
+- `output/reviewed/page_<i>/table_<j>_rendered.png` — Re-rendered table after edits
 
-Review outputs:
+### CNN Artifacts
+- `artifacts/shape_cnn/datasets/generated/manifest.json` — Training dataset manifest
+- `artifacts/shape_cnn/checkpoints/shape_cnn.pt` — Trained model checkpoint
+- `artifacts/shape_cnn/checkpoints/*.metrics.json` — Training metrics
 
-- `output/review_assets/page_<i>/page.png`
-- `output/review_assets/page_<i>/table_<j>_grid.json`
-- `output/result_reviewed.json`
-- `output/reviewed/page_<i>/table_<j>_rendered.png`
+## Key Concepts
 
-CNN artifacts:
+### Merged Cells & Grid Representation
+Tables often include merged cells (`rowspan` > 1 or `colspan` > 1). The pipeline preserves this structure:
+- **GridCell**: A cell in the canonical grid (row, col) with its actual span.
+- **Continuation cells**: Positions covered by a merged cell that is not its anchor (marked `is_continuation: true`).
+- **JSON serialization**: Each row's `cells` dict stores only anchor cells; continuation positions are marked in `merge_info` for reference.
 
-- `artifacts/shape_cnn/datasets/generated/manifest.json`
-- `artifacts/shape_cnn/checkpoints/*.pt`
-- `artifacts/shape_cnn/checkpoints/*.metrics.json`
+### Shape Column Detection
+The pipeline automatically detects the shape column using:
+1. Keyword hints ("形狀", "shape", etc.) in headers
+2. Content analysis: columns with low OCR confidence and image-like pixel characteristics
 
-## Notes
+A detected shape column index is stored in:
+- Pipeline JSON: `table.semantic.shape_column_index`
+- Sidecar (review assets): `grid.shape_col_idx`
 
-- `template` remains the default backend and is intentionally isolated from `cnn`
-- `cnn` v1 is a single-shape classifier and does not auto-fallback to template
-- `embed` is preserved as the older experimental nearest-neighbor backend
-- CNN checkpoints store `class_to_idx`, `idx_to_class`, `num_classes`,
-  preprocess config, and training metadata for future expansion beyond 27 classes
+### Review UI Stability
+The review UI uses **anchor-based editing** (`anchor_row`, `anchor_col`) to remain stable across column renames:
+- Edits reference the canonical grid position, not column names
+- If a user edits JSON column names, re-rendering still locates cells correctly
+- The sidecar captures column order and row types at pipeline time, acting as a fallback
 
-## 中文說明
+### Needs Review Flags
+Cells with OCR confidence < 0.9 are automatically flagged in the JSON:
+```json
+{
+  "text": "鋼筋號",
+  "confidence": 0.85,
+  "needs_review": true
+}
+```
+The review UI highlights these cells with an amber border for easy batch review.
 
-這是一個完整的鋼筋料單 OCR 專案，能把 PDF 圖紙轉成結構化 JSON，
-辨識鋼筋 shape，輸出 debug 圖，並提供瀏覽器人工複核介面。
+## Troubleshooting
 
-目前 shape classifier 有三條路徑，而且彼此獨立：
-
-- `template`：原本的 template matching 流程
-- `cnn`：新增的可訓練 supervised CNN 流程
-- `embed`：舊的實驗性 embedding 最近鄰流程
-
-其中 `template` 仍然是預設值，CNN 的導入不會改壞原本 template 的行為。
-
-## 功能
-
-- 使用 PyMuPDF 將 PDF 轉成影像
-- 版面分析，分出表格區與非表格區
-- 表格切格與 merged-cell 保留
-- 表格文字與非表格 OCR
-- Template matching shape 辨識
-- 可訓練的 CNN shape 辨識
-- review sidecar 與忠實重繪表格
-- 人工複核 UI，可編輯文字、shape ID、非表格 OCR 區塊
-- debug 輸出與 shape 診斷工具
-
-## 安裝
-
+### CNN Threshold Issues
+If CNNmissing shapes after training, the threshold may be too high. Run evaluation:
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+python scripts/eval_shape_cnn.py --checkpoint ... --split val --write-threshold-to-checkpoint
 ```
+This auto-calibrates the threshold and saves it to the checkpoint.
 
-若要使用 CNN / embed backend，請另外安裝：
-
+### Missing Grid Sidecar
+If the review UI shows "sidecar not found", re-run the pipeline with `--debug`:
 ```bash
-pip install torch torchvision
+python scripts/run_pipeline.py --pdf data/file.pdf --debug
 ```
+This generates the required `review_assets/` directory.
 
-## 基本使用
-
-先跑預設 template pipeline：
-
-```bash
-python scripts/run_pipeline.py --pdf data/鋼筋施工圖料單明細表單.pdf --out output/result.json --debug
-```
-
-再啟動人工複核 UI：
-
-```bash
-python scripts/review.py --result output/result.json
-```
-
-瀏覽器開啟：
-
-```text
-http://127.0.0.1:5000
-```
-
-## 指令
-
-### OCR Pipeline
-
-```bash
-python scripts/run_pipeline.py --pdf <輸入.pdf> [--out output/result.json] [--debug] [--dpi 300] [--shape-classifier template]
-```
-
-參數：
-
-- `--pdf`：輸入 PDF 路徑
-- `--out`：輸出 JSON，預設 `output/result.json`
-- `--debug`：輸出 debug 圖
-- `--dpi`：PDF rasterize DPI，預設 `300`
-- `--shape-classifier`：`template`、`cnn`、`embed`
-- `--cnn-checkpoint`：當 `--shape-classifier cnn` 時必填
-
-### Review UI
-
-```bash
-python scripts/review.py --result output/result.json
-```
-
-### Shape 診斷
-
-```bash
-python scripts/diagnose_shapes.py
-```
-
-## CNN 使用流程
-
-CNN 流程與 template 流程完全並存，資料集、checkpoint、推論邏輯都分開。
-
-### 1. 由模板自動建立合成資料集
-
-```bash
-python scripts/build_shape_dataset.py --out-dir artifacts/shape_cnn/datasets/generated
-```
-
-### 2. 用 CPU 訓練
-
-```bash
-python scripts/train_shape_cnn.py ^
-  --manifest artifacts/shape_cnn/datasets/generated/manifest.json ^
-  --out-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt ^
-  --device cpu
-```
-
-### 3. 評估
-
-```bash
-python scripts/eval_shape_cnn.py ^
-  --manifest artifacts/shape_cnn/datasets/generated/manifest.json ^
-  --checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt ^
-  --split test
-```
-
-### 4. 用 CNN backend 跑 OCR pipeline
-
-```bash
-python scripts/run_pipeline.py ^
-  --pdf data/鋼筋施工圖料單明細表單.pdf ^
-  --out output/result.json ^
-  --debug ^
-  --shape-classifier cnn ^
-  --cnn-checkpoint artifacts/shape_cnn/checkpoints/shape_cnn.pt
-```
-
-## 專案結構
-
-```text
-TSG_OCR/
-├─ data/
-├─ scripts/
-├─ src/
-│  └─ shape_classifier/
-│     ├─ template_matcher.py
-│     ├─ cnn_classifier.py
-│     ├─ embed_classifier.py
-│     ├─ cnn_dataset.py
-│     ├─ cnn_dataset_builder.py
-│     ├─ cnn_infer.py
-│     ├─ cnn_model.py
-│     ├─ cnn_train.py
-│     └─ cnn_transforms.py
-├─ tests/
-├─ output/
-└─ artifacts/shape_cnn/
-```
-
-## 重要說明
-
-- `template` 仍是預設 backend，不受 `cnn` 影響
-- `cnn` v1 只處理單一 shape 分類，不會偷偷 fallback 到 template
-- `embed` 保留作為舊的實驗性最近鄰 backend
-- CNN checkpoint 會保存 `class_to_idx`、`idx_to_class`、`num_classes`、
-  preprocess 設定與訓練 metadata，方便未來擴展到 200 類別以上
+### Rendered Image Mismatch
+If the rendered table doesn't match the original:
+1. Check that all shape templates exist in `data/shapes/`
+2. Verify the grid sidecar is present (`output/review_assets/page_<i>/table_<j>_grid.json`)
+3. Re-run debug mode to regenerate renders
