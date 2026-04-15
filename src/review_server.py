@@ -75,6 +75,38 @@ def create_app(
             return reviewed
         return reviewed if reviewed.stat().st_mtime >= original.stat().st_mtime else original
 
+    def current_rendered_image_path(page_idx: int, table_idx: int) -> Path | None:
+        """Return the rendered image that matches the current document source."""
+        current_doc = current_document_path()
+        reviewed_img = (
+            state["output_dir"]
+            / f"page_{page_idx}"
+            / f"table_{table_idx}_rendered.png"
+        )
+        debug_img = (
+            state["result_path"].parent
+            / "debug"
+            / f"page_{page_idx}"
+            / f"03_table_{table_idx}_rendered.png"
+        )
+
+        # If the reviewed JSON is the active source, prefer the reviewed render,
+        # but only if it is at least as new as the reviewed JSON it represents.
+        if current_doc == state["reviewed_path"]:
+            if (
+                reviewed_img.exists()
+                and reviewed_img.stat().st_mtime >= current_doc.stat().st_mtime
+            ):
+                return reviewed_img
+            if debug_img.exists():
+                return debug_img
+            return reviewed_img if reviewed_img.exists() else None
+
+        # If the original JSON is newer/current, ignore stale reviewed renders.
+        if debug_img.exists():
+            return debug_img
+        return None
+
     @app.route("/")
     def index():
         return send_from_directory(template_dir, "index.html")
@@ -107,24 +139,10 @@ def create_app(
 
     @app.route("/api/rendered/<int:page_idx>/<int:table_idx>")
     def api_rendered(page_idx: int, table_idx: int):
-        """Serve the latest rendered table image (reviewed > original)."""
-        reviewed = (
-            state["output_dir"]
-            / f"page_{page_idx}"
-            / f"table_{table_idx}_rendered.png"
-        )
-        if reviewed.exists():
-            return send_file(reviewed, mimetype="image/png")
-
-        # Fall back to the pipeline's debug render.
-        fallback = (
-            state["result_path"].parent
-            / "debug"
-            / f"page_{page_idx}"
-            / f"03_table_{table_idx}_rendered.png"
-        )
-        if fallback.exists():
-            return send_file(fallback, mimetype="image/png")
+        """Serve the rendered image matching the active document source."""
+        img_path = current_rendered_image_path(page_idx, table_idx)
+        if img_path and img_path.exists():
+            return send_file(img_path, mimetype="image/png")
 
         return jsonify({"error": "rendered image not found"}), 404
 

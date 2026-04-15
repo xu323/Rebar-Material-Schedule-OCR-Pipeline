@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TSG OCR 人工審核</title>
+  <title>OCR 人工審核</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -87,10 +87,37 @@
       border-radius: 4px;
       background: #fff;
     }
+    .page-image-wrapper {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      line-height: 0;
+    }
     .image-box img {
       display: block;
       max-width: 100%;
       height: auto;
+    }
+    .page-highlight-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .page-highlight-overlay.hidden {
+      display: none;
+    }
+    .page-highlight-fill {
+      fill: rgba(239, 68, 68, 0.18);
+      stroke: none;
+    }
+    .page-highlight-stroke {
+      fill: none;
+      stroke: #dc2626;
+      stroke-width: 3;
+      vector-effect: non-scaling-stroke;
     }
     .ocr-region {
       margin: 0 0 12px 0;
@@ -98,6 +125,11 @@
       border: 1px solid #cbd5e0;
       border-radius: 4px;
       background: #fff;
+    }
+    .ocr-region.needs-review {
+      background: #fef3c7;
+      outline: 2px solid #f59e0b;
+      outline-offset: -2px;
     }
     .ocr-region.edited {
       background: #d1fae5;
@@ -114,6 +146,7 @@
       font-size: 16px;
       font-weight: 600;
       resize: vertical;
+      scroll-margin: 96px;
     }
     .ocr-region-editor:focus {
       outline: 2px solid #3182ce;
@@ -168,6 +201,7 @@
       background: transparent;
       font: inherit;
       resize: vertical;
+      scroll-margin: 96px;
     }
     .cell-editor:focus {
       outline: 2px solid #3182ce;
@@ -192,19 +226,79 @@
       opacity: 0;
       transition: opacity 0.2s;
       pointer-events: none;
+      z-index: 1100;
     }
     .toast.show { opacity: 1; }
     .toast.error { background: #c53030; }
     .toast.success { background: #2f855a; }
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.55);
+      z-index: 1000;
+    }
+    .dialog-backdrop.show {
+      display: flex;
+    }
+    .dialog {
+      width: min(560px, 100%);
+      padding: 20px;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+    }
+    .dialog h3 {
+      margin: 0 0 10px 0;
+      font-size: 20px;
+      color: #1f2937;
+    }
+    .dialog p {
+      margin: 0;
+      line-height: 1.6;
+      color: #374151;
+      white-space: pre-line;
+    }
+    .dialog .hint {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .dialog .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .dialog .actions button {
+      min-width: 112px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .dialog .actions .confirm {
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+    }
+    .dialog .actions .cancel {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>TSG OCR 人工審核</h1>
+    <h1>OCR 人工審核</h1>
     <div class="controls">
       <label for="pageSelect" style="font-size:13px">頁面</label>
       <select id="pageSelect"></select>
-      <span class="status" id="statusText">載入中</span>
+      <span class="status" id="statusText">載入中...</span>
       <button id="saveBtn" disabled>確認並重新渲染</button>
     </div>
   </header>
@@ -212,9 +306,15 @@
     <section class="pane left">
       <h2>原始頁面影像</h2>
       <div class="image-box">
-        <img id="pageImage" alt="page image">
+        <div class="page-image-wrapper">
+          <img id="pageImage" alt="page image">
+          <svg id="pageHighlightOverlay" class="page-highlight-overlay hidden" aria-hidden="true">
+            <rect id="pageHighlightFill" class="page-highlight-fill"></rect>
+            <rect id="pageHighlightStroke" class="page-highlight-stroke"></rect>
+          </svg>
+        </div>
       </div>
-      <h2>檢測結果</h2>
+      <h2>渲染結果</h2>
       <div id="renderedImages"></div>
     </section>
     <section class="pane right">
@@ -223,12 +323,38 @@
     </section>
   </main>
   <div class="toast" id="toast"></div>
+  <div class="dialog-backdrop" id="dialogBackdrop" hidden>
+    <div
+      class="dialog"
+      id="dialogBox"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialogTitle"
+      aria-describedby="dialogMessage"
+      tabindex="-1"
+    >
+      <h3 id="dialogTitle">確認</h3>
+      <p id="dialogMessage"></p>
+      <div class="hint" id="dialogHint">Enter / Y：確認　Esc / N：取消</div>
+      <div class="actions">
+        <button type="button" class="cancel" id="dialogCancelBtn">取消</button>
+        <button type="button" class="confirm" id="dialogConfirmBtn">確認</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const state = {
       document: null,
       currentPage: 0,
       edits: new Map(),
+      pageEditors: [],
+      reviewTargets: [],
+      nextEditorOrder: 0,
+      saveInFlight: false,
+      dialog: null,
+      activeHighlightKey: null,
+      pendingHighlight: null,
     };
 
     function editKey(p, t, r, c) {
@@ -237,6 +363,239 @@
 
     function nonTableEditKey(p, regionIdx) {
       return `ntr|${p}|${regionIdx}`;
+    }
+
+    function resetPageNavigation() {
+      state.pageEditors = [];
+      state.reviewTargets = [];
+      state.nextEditorOrder = 0;
+    }
+
+    function registerPageEditor({ key, element, isReviewTarget, focusBBox = null }) {
+      if (!key || !element) return null;
+      const entry = {
+        key,
+        element,
+        isReviewTarget: Boolean(isReviewTarget),
+        order: state.nextEditorOrder++,
+        focusBBox: normalizePageBBox(focusBBox),
+      };
+      element.dataset.reviewNavKey = key;
+      element.addEventListener("keydown", handleEditorKeydown);
+       element.addEventListener("focus", () => {
+        showFocusHighlight(entry.focusBBox, key);
+      });
+      element.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          const activeKey = document.activeElement?.dataset?.reviewNavKey || null;
+          if (activeKey !== key) {
+            hideFocusHighlight(key);
+          }
+        }, 0);
+      });
+      state.pageEditors.push(entry);
+      if (entry.isReviewTarget) {
+        state.reviewTargets.push(entry);
+      }
+      return entry;
+    }
+
+    function normalizePageBBox(bbox) {
+      if (!bbox || typeof bbox !== "object") return null;
+      const x = Number(bbox.x);
+      const y = Number(bbox.y);
+      const w = Number(bbox.w);
+      const h = Number(bbox.h);
+      if (![x, y, w, h].every(Number.isFinite)) return null;
+      if (w <= 0 || h <= 0) return null;
+      return { x, y, w, h };
+    }
+
+    function composePageBBox(parentBBox, childBBox) {
+      const parent = normalizePageBBox(parentBBox);
+      const child = normalizePageBBox(childBBox);
+      if (!parent || !child) return null;
+      return {
+        x: parent.x + child.x,
+        y: parent.y + child.y,
+        w: child.w,
+        h: child.h,
+      };
+    }
+
+    function getPageHighlightElements() {
+      return {
+        image: document.getElementById("pageImage"),
+        overlay: document.getElementById("pageHighlightOverlay"),
+        fill: document.getElementById("pageHighlightFill"),
+        stroke: document.getElementById("pageHighlightStroke"),
+      };
+    }
+
+    function renderPendingHighlight() {
+      const { image, overlay, fill, stroke } = getPageHighlightElements();
+      const bbox = state.pendingHighlight;
+      if (!image || !overlay || !fill || !stroke || !bbox) return false;
+      if (!image.complete || !image.naturalWidth || !image.naturalHeight) return false;
+
+      overlay.setAttribute("viewBox", `0 0 ${image.naturalWidth} ${image.naturalHeight}`);
+      overlay.classList.remove("hidden");
+
+      for (const rect of [fill, stroke]) {
+        rect.setAttribute("x", String(bbox.x));
+        rect.setAttribute("y", String(bbox.y));
+        rect.setAttribute("width", String(bbox.w));
+        rect.setAttribute("height", String(bbox.h));
+      }
+      return true;
+    }
+
+    function showFocusHighlight(bbox, key) {
+      state.activeHighlightKey = key || null;
+      state.pendingHighlight = normalizePageBBox(bbox);
+      if (!state.pendingHighlight) {
+        hideFocusHighlight(key);
+        return;
+      }
+      renderPendingHighlight();
+    }
+
+    function hideFocusHighlight(key = null) {
+      if (key && state.activeHighlightKey && key !== state.activeHighlightKey) return;
+      const { overlay } = getPageHighlightElements();
+      state.activeHighlightKey = null;
+      state.pendingHighlight = null;
+      if (overlay) {
+        overlay.classList.add("hidden");
+      }
+    }
+
+    function getPageByIndex(pageIdx) {
+      return (state.document?.pages || []).find(p => p.page_index === pageIdx) || null;
+    }
+
+    function getEditorEntryByKey(key) {
+      return state.pageEditors.find(entry => entry.key === key) || null;
+    }
+
+    function focusEditorTarget(entry) {
+      if (!entry || !entry.element) return false;
+      entry.element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+      entry.element.focus({ preventScroll: true });
+      if (typeof entry.element.select === "function") {
+        entry.element.select();
+      }
+      return true;
+    }
+
+    async function applyFocusRequest(focusRequest) {
+      if (!focusRequest) return false;
+      await new Promise(resolve => window.requestAnimationFrame(resolve));
+
+      if (focusRequest.type === "firstReview") {
+        return focusEditorTarget(state.reviewTargets[0] || null);
+      }
+
+      if (focusRequest.type === "key") {
+        return focusEditorTarget(getEditorEntryByKey(focusRequest.key));
+      }
+
+      return false;
+    }
+
+    async function showKeyboardDialog({
+      title = "確認",
+      message,
+      confirmLabel = "確認",
+      cancelLabel = "取消",
+      hint = "Enter / Y：確認　Esc / N：取消",
+    }) {
+      const backdrop = document.getElementById("dialogBackdrop");
+      const dialogBox = document.getElementById("dialogBox");
+      const titleEl = document.getElementById("dialogTitle");
+      const messageEl = document.getElementById("dialogMessage");
+      const hintEl = document.getElementById("dialogHint");
+      const confirmBtn = document.getElementById("dialogConfirmBtn");
+      const cancelBtn = document.getElementById("dialogCancelBtn");
+
+      if (state.dialog && typeof state.dialog.close === "function") {
+        state.dialog.close(false);
+      }
+
+      titleEl.textContent = title;
+      messageEl.textContent = message;
+      hintEl.textContent = hint;
+      confirmBtn.textContent = confirmLabel;
+      cancelBtn.textContent = cancelLabel;
+
+      return await new Promise(resolve => {
+        const previousFocus = document.activeElement;
+
+        function cleanup(result) {
+          backdrop.classList.remove("show");
+          backdrop.hidden = true;
+          backdrop.removeEventListener("click", handleBackdropClick);
+          dialogBox.removeEventListener("keydown", handleKeydown);
+          confirmBtn.removeEventListener("click", handleConfirm);
+          cancelBtn.removeEventListener("click", handleCancel);
+          state.dialog = null;
+          if (previousFocus && typeof previousFocus.focus === "function") {
+            previousFocus.focus({ preventScroll: true });
+          }
+          resolve(result);
+        }
+
+        function handleConfirm() {
+          cleanup(true);
+        }
+
+        function handleCancel() {
+          cleanup(false);
+        }
+
+        function handleBackdropClick(event) {
+          if (event.target === backdrop) {
+            cleanup(false);
+          }
+        }
+
+        function handleKeydown(event) {
+          if (event.isComposing) return;
+          if (event.key === "Enter" || event.key === "y" || event.key === "Y") {
+            event.preventDefault();
+            cleanup(true);
+            return;
+          }
+          if (event.key === "Escape" || event.key === "n" || event.key === "N") {
+            event.preventDefault();
+            cleanup(false);
+          }
+        }
+
+        state.dialog = { close: cleanup };
+        backdrop.hidden = false;
+        backdrop.classList.add("show");
+        backdrop.addEventListener("click", handleBackdropClick);
+        dialogBox.addEventListener("keydown", handleKeydown);
+        confirmBtn.addEventListener("click", handleConfirm);
+        cancelBtn.addEventListener("click", handleCancel);
+        confirmBtn.focus();
+      });
+    }
+
+    function handleEditorKeydown(event) {
+      if (state.dialog || state.saveInFlight) return;
+      if (event.isComposing) return;
+      if (event.key !== "Enter") return;
+      if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+
+      event.preventDefault();
+      const key = event.currentTarget.dataset.reviewNavKey;
+      void advanceToNextReviewTarget(key);
     }
 
     function rowCellByColumnIndex(table, row, columnIndex) {
@@ -263,6 +622,56 @@
       return Boolean(cell && cell.needs_review && hasReviewableContent(cell));
     }
 
+    function hasExplicitShapeContent(cell) {
+      if (!cell || typeof cell !== "object") return false;
+      if (typeof cell.shape_id === "string" && cell.shape_id.trim()) return true;
+      return Array.isArray(cell.components) && cell.components.length > 0;
+    }
+
+    function shouldRenderShapeWidget(cell, rowType, columnIndex, shapeColIdx, colspan) {
+      if (shapeColIdx === null || shapeColIdx === undefined) return false;
+      if (columnIndex !== shapeColIdx) return false;
+      if ((colspan || 1) !== 1) return false;
+      if (rowType !== "data") return false;
+      return hasExplicitShapeContent(cell);
+    }
+
+    function shouldRenderNonTableRegion(region, tableBBox) {
+      if (!region || typeof region !== "object") return false;
+      const text = (region.text || "").trim();
+      const label = (region.label || "").trim();
+      if (!text) return false;
+
+      const allowedLabels = new Set(["figure_title", "doc_title", "text"]);
+      if (!allowedLabels.has(label)) return false;
+
+      if (!tableBBox) return true;
+
+      const bbox = region.bbox || {};
+      const regionBottom = (bbox.y || 0) + (bbox.h || 0);
+      const gapAbove = tableBBox.y - regionBottom;
+      const overlapTolerance = 10;
+      const maxGapAbove = 250;
+
+      if (regionBottom > tableBBox.y + overlapTolerance) return false;
+      if (gapAbove < -overlapTolerance || gapAbove > maxGapAbove) return false;
+      return true;
+    }
+
+    function getVisibleNonTableEntries(page) {
+      const firstTableBBox = (page.tables && page.tables.length > 0)
+        ? page.tables[0].bbox
+        : null;
+      return (page.non_table_regions || [])
+        .map((region, regionIdx) => ({ region, regionIdx }))
+        .filter(({ region }) => shouldRenderNonTableRegion(region, firstTableBBox))
+        .sort((a, b) => {
+          const ab = a.region.bbox || {};
+          const bb = b.region.bbox || {};
+          return (ab.y || 0) - (bb.y || 0) || (ab.x || 0) - (bb.x || 0);
+        });
+    }
+
     function setStatus(text) {
       document.getElementById("statusText").textContent = text;
     }
@@ -277,21 +686,40 @@
     function updateSaveButton() {
       const btn = document.getElementById("saveBtn");
       const count = state.edits.size;
-      btn.disabled = count === 0;
+      btn.disabled = count === 0 || state.saveInFlight;
       btn.textContent = count > 0
         ? `確認並重新渲染 (${count})`
         : "確認並重新渲染";
     }
 
-    async function loadResult() {
-      setStatus("載入中");
+    async function loadResult(options = {}) {
+      const { focusRequest = null } = options;
+      setStatus("載入中...");
       const resp = await fetch("/api/result");
       const data = await resp.json();
       state.document = data.document;
       state.edits.clear();
+
+      const totalPages = state.document?.pages?.length || 0;
+      if (totalPages > 0 && state.currentPage >= totalPages) {
+        state.currentPage = totalPages - 1;
+      }
+
       renderPageSelect();
-      await renderPage(state.currentPage);
-      setStatus(data.is_reviewed ? "已載入人工修正版" : `共 ${state.document.total_pages} 頁`);
+
+      if (totalPages > 0) {
+        await renderPage(state.currentPage, { focusRequest });
+      } else {
+        resetPageNavigation();
+        document.getElementById("pageBody").innerHTML = "";
+        document.getElementById("renderedImages").innerHTML = "";
+      }
+
+      setStatus(
+        data.is_reviewed
+          ? "已載入人工修正版"
+          : `共 ${state.document.total_pages} 頁`,
+      );
       updateSaveButton();
     }
 
@@ -304,17 +732,26 @@
         opt.textContent = `第 ${page.page_index + 1} 頁`;
         sel.appendChild(opt);
       }
-      sel.value = state.currentPage;
+      sel.value = String(state.currentPage);
       sel.onchange = async () => {
-        state.currentPage = parseInt(sel.value, 10);
-        await renderPage(state.currentPage);
+        await goToPage(parseInt(sel.value, 10));
       };
     }
 
-    async function renderPage(pageIdx) {
-      const page = state.document.pages.find(p => p.page_index === pageIdx);
+    async function goToPage(pageIdx, options = {}) {
+      state.currentPage = pageIdx;
+      const sel = document.getElementById("pageSelect");
+      if (sel) sel.value = String(pageIdx);
+      await renderPage(pageIdx, options);
+    }
+
+    async function renderPage(pageIdx, options = {}) {
+      const { focusRequest = null } = options;
+      const page = getPageByIndex(pageIdx);
       if (!page) return;
 
+      resetPageNavigation();
+      hideFocusHighlight();
       const bust = Date.now();
       document.getElementById("pageImage").src = `/api/page_image/${pageIdx}?t=${bust}`;
 
@@ -333,22 +770,26 @@
       const body = document.getElementById("pageBody");
       body.innerHTML = "";
 
-      (page.non_table_regions || []).forEach((ntr, regionIdx) => {
-        renderNonTableRegion(body, ntr, pageIdx, regionIdx);
+      getVisibleNonTableEntries(page).forEach(({ region, regionIdx }) => {
+        renderNonTableRegion(body, region, pageIdx, regionIdx);
       });
 
       for (let tableIdx = 0; tableIdx < page.tables.length; tableIdx++) {
         await renderTable(body, page, page.tables[tableIdx], tableIdx);
       }
+
+      await applyFocusRequest(focusRequest);
     }
 
     function renderNonTableRegion(container, region, pageIdx, regionIdx) {
       const key = nonTableEditKey(pageIdx, regionIdx);
       const current = state.edits.get(key);
       const text = current !== undefined ? current.text : (region.text || "");
+      const isReviewTarget = shouldHighlightReview(region);
 
       const wrapper = document.createElement("div");
       wrapper.className = "ocr-region";
+      if (isReviewTarget) wrapper.classList.add("needs-review");
       if (state.edits.has(key)) wrapper.classList.add("edited");
 
       const ta = document.createElement("textarea");
@@ -372,6 +813,12 @@
         updateSaveButton();
       });
       wrapper.appendChild(ta);
+      registerPageEditor({
+        key,
+        element: ta,
+        isReviewTarget,
+        focusBBox: region.bbox,
+      });
 
       if (typeof region.confidence === "number") {
         const badge = document.createElement("span");
@@ -400,7 +847,10 @@
       }
 
       const shapeColIdx = gridData.shape_col_idx;
-      const gridCells = gridData.cells || [];
+      const tablePageBBox = normalizePageBBox(gridData.table_bbox || table.bbox);
+      const orderedGridCells = [...(gridData.cells || [])].sort((a, b) => {
+        return a.row - b.row || a.col - b.col || a.rowspan - b.rowspan || a.colspan - b.colspan;
+      });
       const rowTypes = {};
       const rowsByIndex = Object.fromEntries(
         (table.rows || []).map(row => {
@@ -410,7 +860,7 @@
       );
 
       const colWidths = {};
-      for (const gc of gridCells) {
+      for (const gc of orderedGridCells) {
         if (gc.colspan === 1 && gc.bbox && gc.bbox.w > 0) {
           if (!(gc.col in colWidths) || gc.bbox.w > colWidths[gc.col]) {
             colWidths[gc.col] = gc.bbox.w;
@@ -418,7 +868,9 @@
         }
       }
 
-      const maxCol = Math.max(...gridCells.map(gc => gc.col + gc.colspan - 1));
+      const maxCol = orderedGridCells.length > 0
+        ? Math.max(...orderedGridCells.map(gc => gc.col + gc.colspan - 1))
+        : 0;
       const wrapper = document.createElement("div");
       wrapper.className = "grid-table";
       wrapper.style.gridTemplateColumns = Array.from(
@@ -426,32 +878,51 @@
         (_, c) => `${colWidths[c] || 100}fr`,
       ).join(" ");
 
-      for (const gc of gridCells) {
+      for (const gc of orderedGridCells) {
         const row = rowsByIndex[gc.row] || {};
         const cell = rowCellByColumnIndex(table, row, gc.col);
         const rowType = rowTypes[gc.row] || "data";
+        const key = editKey(pageIdx, tableIdx, gc.row, gc.col);
+        const isReviewTarget = shouldHighlightReview(cell);
         const div = document.createElement("div");
         div.className = `grid-cell ${rowType}`;
         div.style.gridRow = `${gc.row + 1} / span ${gc.rowspan}`;
         div.style.gridColumn = `${gc.col + 1} / span ${gc.colspan}`;
 
-        const isShapeWidget = (
-          rowType === "data" &&
-          shapeColIdx !== null &&
-          gc.col === shapeColIdx &&
-          gc.colspan === 1
+        const isShapeWidget = shouldRenderShapeWidget(
+          cell,
+          rowType,
+          gc.col,
+          shapeColIdx,
+          gc.colspan,
         );
 
-        if (shouldHighlightReview(cell)) div.classList.add("needs-review");
-        if (state.edits.has(editKey(pageIdx, tableIdx, gc.row, gc.col))) {
-          div.classList.add("edited");
-        }
+        if (isReviewTarget) div.classList.add("needs-review");
+        if (state.edits.has(key)) div.classList.add("edited");
 
         if (isShapeWidget) {
           div.classList.add("shape-cell");
-          renderShapeCell(div, cell, pageIdx, tableIdx, gc.row, gc.col);
+          renderShapeCell(
+            div,
+            cell,
+            pageIdx,
+            tableIdx,
+            gc.row,
+            gc.col,
+            isReviewTarget,
+            composePageBBox(tablePageBBox, gc.bbox),
+          );
         } else {
-          renderTextCell(div, cell, pageIdx, tableIdx, gc.row, gc.col);
+          renderTextCell(
+            div,
+            cell,
+            pageIdx,
+            tableIdx,
+            gc.row,
+            gc.col,
+            isReviewTarget,
+            composePageBBox(tablePageBBox, gc.bbox),
+          );
         }
 
         wrapper.appendChild(div);
@@ -467,35 +938,37 @@
       wrapper.style.gridTemplateColumns = `repeat(${(table.columns || []).length}, 1fr)`;
 
       const shapeColIdx = table.semantic ? table.semantic.shape_column_index : null;
+      const orderedRows = [...(table.rows || [])].sort((a, b) => a.index - b.index);
 
-      for (const row of table.rows || []) {
+      for (const row of orderedRows) {
         for (let cIdx = 0; cIdx < (table.columns || []).length; cIdx++) {
           const cell = rowCellByColumnIndex(table, row, cIdx);
           if (cell.is_continuation) continue;
 
           const rowType = row.row_type || "data";
+          const key = editKey(pageIdx, tableIdx, row.index, cIdx);
+          const isReviewTarget = shouldHighlightReview(cell);
           const div = document.createElement("div");
           div.className = `grid-cell ${rowType}`;
           div.style.gridRow = `${row.index + 1} / span ${cell.rowspan || 1}`;
           div.style.gridColumn = `${cIdx + 1} / span ${cell.colspan || 1}`;
 
-          const isShapeWidget = (
-            rowType === "data" &&
-            shapeColIdx !== null &&
-            cIdx === shapeColIdx &&
-            (cell.colspan || 1) === 1
+          const isShapeWidget = shouldRenderShapeWidget(
+            cell,
+            rowType,
+            cIdx,
+            shapeColIdx,
+            cell.colspan || 1,
           );
 
-          if (shouldHighlightReview(cell)) div.classList.add("needs-review");
-          if (state.edits.has(editKey(pageIdx, tableIdx, row.index, cIdx))) {
-            div.classList.add("edited");
-          }
+          if (isReviewTarget) div.classList.add("needs-review");
+          if (state.edits.has(key)) div.classList.add("edited");
 
           if (isShapeWidget) {
             div.classList.add("shape-cell");
-            renderShapeCell(div, cell, pageIdx, tableIdx, row.index, cIdx);
+            renderShapeCell(div, cell, pageIdx, tableIdx, row.index, cIdx, isReviewTarget, null);
           } else {
-            renderTextCell(div, cell, pageIdx, tableIdx, row.index, cIdx);
+            renderTextCell(div, cell, pageIdx, tableIdx, row.index, cIdx, isReviewTarget, null);
           }
 
           wrapper.appendChild(div);
@@ -505,7 +978,7 @@
       container.appendChild(wrapper);
     }
 
-    function renderTextCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx) {
+    function renderTextCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx, isReviewTarget, focusBBox) {
       const key = editKey(pageIdx, tableIdx, rowIdx, colIdx);
       const current = state.edits.get(key);
       const text = current !== undefined ? current.text : (cell.text || "");
@@ -516,10 +989,10 @@
       ta.value = text;
       ta.addEventListener("input", () => {
         const original = cell.text || "";
-        if (ta.value === original && !shouldHighlightReview(cell)) {
+        if (ta.value === original) {
           state.edits.delete(key);
           target.classList.remove("edited");
-        } else if (ta.value !== original) {
+        } else {
           state.edits.set(key, {
             page_index: pageIdx,
             table_index: tableIdx,
@@ -532,6 +1005,7 @@
         updateSaveButton();
       });
       target.appendChild(ta);
+      registerPageEditor({ key, element: ta, isReviewTarget, focusBBox });
 
       if (typeof cell.confidence === "number") {
         const badge = document.createElement("span");
@@ -541,7 +1015,7 @@
       }
     }
 
-    function renderShapeCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx) {
+    function renderShapeCell(target, cell, pageIdx, tableIdx, rowIdx, colIdx, isReviewTarget, focusBBox) {
       const key = editKey(pageIdx, tableIdx, rowIdx, colIdx);
       const current = state.edits.get(key);
       const shapeId = current !== undefined && "shape_id" in current
@@ -562,10 +1036,10 @@
       input.placeholder = "shape_XX";
       input.addEventListener("input", () => {
         const original = cell.shape_id || "";
-        if (input.value === original && !shouldHighlightReview(cell)) {
+        if (input.value === original) {
           state.edits.delete(key);
           target.classList.remove("edited");
-        } else if (input.value !== original) {
+        } else {
           state.edits.set(key, {
             page_index: pageIdx,
             table_index: tableIdx,
@@ -578,6 +1052,7 @@
         updateSaveButton();
       });
       target.appendChild(input);
+      registerPageEditor({ key, element: input, isReviewTarget, focusBBox });
 
       if (typeof cell.confidence === "number") {
         const badge = document.createElement("span");
@@ -587,11 +1062,97 @@
       }
     }
 
-    async function saveEdits() {
-      if (state.edits.size === 0) return;
+    async function advanceToNextReviewTarget(currentKey) {
+      const current = getEditorEntryByKey(currentKey);
+      const currentOrder = current ? current.order : -1;
+      const nextReview = state.reviewTargets.find(entry => entry.order > currentOrder);
+      if (nextReview) {
+        focusEditorTarget(nextReview);
+        return;
+      }
+      await handlePageCompletion();
+    }
+
+    async function handlePageCompletion() {
+      const totalPages = state.document?.pages?.length || 0;
+      const hasLaterPage = state.currentPage < totalPages - 1;
+      if (hasLaterPage) {
+        const confirmed = await showKeyboardDialog({
+          title: "本頁完成",
+          message: "本頁所有修正已完成，是否儲存並前往下一頁？（Y/N）",
+          confirmLabel: "儲存並前往下一頁",
+          cancelLabel: "留在本頁",
+        });
+        if (!confirmed) return;
+
+        const moved = await saveAndAdvanceToNextReviewPage();
+        if (moved) return;
+      }
+
+      await handleDocumentCompletion();
+    }
+
+    async function saveAndAdvanceToNextReviewPage() {
+      const saved = await saveEdits();
+      if (!saved) return false;
+
+      const totalPages = state.document?.pages?.length || 0;
+      for (let pageIdx = state.currentPage + 1; pageIdx < totalPages; pageIdx++) {
+        await goToPage(pageIdx, { focusRequest: { type: "firstReview" } });
+        if (state.reviewTargets.length > 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    async function handleDocumentCompletion() {
+      const confirmed = await showKeyboardDialog({
+        title: "全部完成",
+        message: "已完成所有需人工檢查區域！是否儲存所有修改並結束審核？",
+        confirmLabel: "儲存並結束審核",
+        cancelLabel: "留在目前頁面",
+      });
+      if (!confirmed) return;
+
+      const saved = await saveEdits();
+      if (!saved) return;
+
+      const closeWindow = await showKeyboardDialog({
+        title: "審核完成",
+        message: "所有修改已儲存。\n按 Enter / Y 關閉審核視窗，按 Esc / N 返回第 1 頁。",
+        confirmLabel: "關閉視窗",
+        cancelLabel: "返回第 1 頁",
+      });
+
+      if (closeWindow) {
+        window.open("", "_self");
+        window.close();
+        showToast("所有修改已儲存，如瀏覽器未允許自動關閉，可直接手動關閉此頁面。", "success");
+        setStatus("審核完成");
+        return;
+      }
+
+      await goToPage(0, { focusRequest: { type: "firstReview" } });
+      showToast("已返回第 1 頁。", "success");
+    }
+
+    async function saveEdits(options = {}) {
+      const { focusRequest = null } = options;
+      if (state.saveInFlight) return false;
+
+      if (state.edits.size === 0) {
+        updateSaveButton();
+        if (focusRequest) {
+          await applyFocusRequest(focusRequest);
+        }
+        return true;
+      }
+
       const btn = document.getElementById("saveBtn");
+      state.saveInFlight = true;
       btn.disabled = true;
-      setStatus("儲存中");
+      setStatus("儲存中...");
 
       try {
         const resp = await fetch("/api/save", {
@@ -603,17 +1164,30 @@
         if (!resp.ok || !data.ok) {
           throw new Error(data.error || `HTTP ${resp.status}`);
         }
-        showToast(`已套用 ${data.applied_edits} 筆修改`, "success");
-        await loadResult();
+        showToast(`已儲存 ${data.applied_edits} 筆修改`, "success");
+        await loadResult({ focusRequest });
+        return true;
       } catch (err) {
-        showToast(`儲存失敗: ${err.message}`, "error");
+        showToast(`儲存失敗：${err.message}`, "error");
         setStatus("儲存失敗");
-        btn.disabled = false;
+        return false;
+      } finally {
+        state.saveInFlight = false;
+        updateSaveButton();
       }
     }
 
-    document.getElementById("saveBtn").addEventListener("click", saveEdits);
-    loadResult();
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      void saveEdits();
+    });
+    document.getElementById("pageImage").addEventListener("load", () => {
+      renderPendingHighlight();
+    });
+    window.addEventListener("resize", () => {
+      renderPendingHighlight();
+    });
+
+    void loadResult();
   </script>
 </body>
 </html>

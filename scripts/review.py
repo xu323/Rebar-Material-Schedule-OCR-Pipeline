@@ -22,7 +22,7 @@ from src.review_server import create_app
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Launch the TSG OCR human-in-the-loop review UI"
+        description="Launch the human-in-the-loop review UI"
     )
     parser.add_argument(
         "--result",

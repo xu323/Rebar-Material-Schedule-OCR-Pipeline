@@ -1,22 +1,21 @@
-from .base import ShapeClassifier, ShapeMatch
+from src.models import ShapeMatch
+
+from .base import ShapeClassifier
+from .cnn_classifier import CNNShapeClassifier
+from .embed_classifier import EmbedShapeClassifier
 from .registry import get_classifier, register
 from .template_matcher import TemplateMatcherClassifier
 
 register("template", TemplateMatcherClassifier)
-
-# Optional CNN backend: registered only if torch/torchvision import succeeds.
-try:
-    from .cnn_classifier import CNNShapeClassifier  # noqa: F401
-
-    register("cnn", CNNShapeClassifier)
-except ImportError:  # pragma: no cover — optional dep
-    CNNShapeClassifier = None  # type: ignore
+register("cnn", CNNShapeClassifier)
+register("embed", EmbedShapeClassifier)
 
 __all__ = [
     "ShapeClassifier",
     "ShapeMatch",
     "TemplateMatcherClassifier",
     "CNNShapeClassifier",
+    "EmbedShapeClassifier",
     "get_classifier",
     "register",
 ]

@@ -23,6 +23,7 @@ def run_pipeline(
     debug: bool = False,
     dpi: int = 300,
     classifier_name: str = "template",
+    cnn_checkpoint: Path | None = None,
 ) -> DocumentResult:
     """Execute the full OCR pipeline: PDF -> JSON."""
     from src.pdf_rasterizer import rasterize_pdf
@@ -57,7 +58,12 @@ def run_pipeline(
             "composite_min_dim": cfg.composite_min_dim,
         }
     elif classifier_name == "cnn":
-        classifier_kwargs = {"threshold": cfg.cnn_match_threshold}
+        classifier_kwargs = {
+            "checkpoint_path": cnn_checkpoint,
+            "device": "cpu",
+        }
+    elif classifier_name == "embed":
+        classifier_kwargs = {"threshold": cfg.cnn_match_threshold, "device": "cpu"}
     classifier = get_classifier(classifier_name, **classifier_kwargs)
     classifier.load_templates(cfg.shapes_dir)
 
@@ -305,8 +311,7 @@ def run_pipeline(
             review_dir = output_path.parent / "review_assets" / f"page_{page_idx}"
             review_dir.mkdir(parents=True, exist_ok=True)
             page_png = review_dir / "page.png"
-            if not page_png.exists():
-                cv2.imwrite(str(page_png), page_img)
+            cv2.imwrite(str(page_png), page_img)
             _write_grid_sidecar(
                 review_dir / f"table_{t_idx}_grid.json",
                 grid_cells=grid_cells,

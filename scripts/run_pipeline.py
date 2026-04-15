@@ -32,7 +32,13 @@ def main() -> None:
     parser.add_argument(
         "--shape-classifier",
         default="template",
-        help="Shape classifier backend (default: template)",
+        help="Shape classifier backend: template | cnn | embed (default: template)",
+    )
+    parser.add_argument(
+        "--cnn-checkpoint",
+        type=Path,
+        default=None,
+        help="PyTorch checkpoint path for --shape-classifier cnn",
     )
     args = parser.parse_args()
 
@@ -46,6 +52,7 @@ def main() -> None:
         debug=args.debug,
         dpi=args.dpi,
         classifier_name=args.shape_classifier,
+        cnn_checkpoint=args.cnn_checkpoint,
     )
     print(f"Done. Output saved to {args.out}")
 

@@ -426,19 +426,34 @@ class TemplateMatcherClassifier(ShapeClassifier):
         overlap: float,
         projection: float,
     ) -> float:
-        weighted: list[tuple[float, float]] = []
-        if corr >= 0.0:
-            weighted.append((0.35, corr))
+        global_weighted: list[tuple[float, float]] = []
         if canvas_corr >= 0.0:
-            weighted.append((0.30, canvas_corr))
+            global_weighted.append((0.45, canvas_corr))
         if overlap >= 0.0:
-            weighted.append((0.20, overlap))
+            global_weighted.append((0.35, overlap))
         if projection >= 0.0:
-            weighted.append((0.15, projection))
-        if not weighted:
+            global_weighted.append((0.20, projection))
+        if not global_weighted and corr < 0.0:
             return -1.0
-        total_weight = sum(weight for weight, _ in weighted)
-        return sum(weight * value for weight, value in weighted) / total_weight
+
+        global_score = -1.0
+        if global_weighted:
+            total_weight = sum(weight for weight, _ in global_weighted)
+            global_score = (
+                sum(weight * value for weight, value in global_weighted)
+                / total_weight
+            )
+
+        # Raw template correlation is useful, but it is only a local match:
+        # for similar symbols it can over-score a partial hit. Clamp it by the
+        # global shape fit so that a local fragment cannot overturn a stronger
+        # full-shape match.
+        if corr >= 0.0 and global_score >= 0.0:
+            corr_support = min(corr, global_score)
+            return (global_score * 0.8) + (corr_support * 0.2)
+        if global_score >= 0.0:
+            return global_score
+        return corr
 
     def _find_components(self, cell_bw: np.ndarray) -> list[BBox]:
         """Return bounding boxes of the significant foreground components.

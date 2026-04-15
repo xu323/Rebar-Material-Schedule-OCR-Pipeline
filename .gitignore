@@ -17,3 +17,4 @@ build/
 
 # Project specific
 output/
+artifacts/shape_cnn/
