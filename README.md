@@ -1,15 +1,12 @@
-# TSG OCR — 鋼筋料單智能提取系統
+# OCR — 鋼筋料單智能提取系統
 
 **[English](./README_en.md) | [中文](./README.md)**
 
 一套完整的 OCR 流程，可將鋼筋施工圖料單 PDF 轉成結構化 JSON，具備智能表格檢測、合併格保留、shape 辨識、以及瀏覽器人工審核介面。
 
-## 概述
+## DEMO
 
-本專案結合多種技術手段自動提取並分類鋼筋料單資訊：
-
-- **Template Matching**：原始的魯棒 shape 分類器（預設後端）
-- **CNN**：可訓練的監督式卷積神經網路，提升辨識準確度
+https://github.com/user-attachments/assets/fd1ed9a8-c4c3-4523-af9b-4f10069d3a2b
 
 ## 核心功能
 
@@ -30,13 +27,6 @@
 - 基於 anchor 的穩定格單位定位（免受欄名更改影響）
 - 逐表渲染預覽與編輯即時刷新
 - 批量編輯與信心可視化
-
-### 除錯與診斷
-- 版面區域疊加圖（01_layout.png）
-- 格線視覺化與合併格標記（02_table_<j>_grid.png）
-- 忠實重繪表格（03_table_<j>_rendered.png）
-- Shape 修復驗證疊加（04_table_<j>_repair.png）
-- Shape 診斷 CLI 工具
 
 ## 安裝
 

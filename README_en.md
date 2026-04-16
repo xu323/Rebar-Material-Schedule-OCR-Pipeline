@@ -1,15 +1,12 @@
-# TSG OCR — Rebar Material Schedule Extract
+# OCR — Rebar Material Schedule Extract
 
-**[中文](./README.md) | English(./README_en.md)**
+**[中文](./README.md) | [English](./README_en.md)**
 
 A complete OCR pipeline for converting rebar material schedule PDFs into structured JSON, with intelligent table detection, merged-cell handling, shape classification, and a browser-based human-in-the-loop review interface.
 
-## Overview
+## DEMO
 
-This project combines multiple approaches to extract and classify information from construction rebar material schedules:
-
-- **Template Matching**: Original robust shape classifier (default backend)
-- **CNN**: Trainable supervised CNN for improved shape recognition
+https://github.com/user-attachments/assets/fd1ed9a8-c4c3-4523-af9b-4f10069d3a2b
 
 ## Key Features
 
@@ -30,13 +27,6 @@ This project combines multiple approaches to extract and classify information fr
 - Edit tracking with anchor-based cell identity (stable across column renames)
 - Per-table rendered previews with per-edit refresh
 - Batch editing and confidence visualization
-
-### Debug & Diagnostics
-- Layout region overlays (01_layout.png)
-- Cell grid visualization with merged-cell markers (02_table_<j>_grid.png)
-- Faithful rendered table reconstruction (03_table_<j>_rendered.png)
-- Shape repair verification overlays (04_table_<j>_repair.png)
-- Shape diagnostic CLI tools
 
 ## Installation
 
