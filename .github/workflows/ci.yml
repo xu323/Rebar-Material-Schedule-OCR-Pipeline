@@ -176,6 +176,17 @@ jobs:
           --debug
           --shape-classifier template
 
+      - name: Debug - Pipeline output
+        if: always()
+        run: |
+          echo "=== Pipeline exit status: $?"
+          echo "=== Checking for result JSON ==="
+          ls -la output/ 2>/dev/null || echo "output/ not found"
+          echo "=== Checking for debug directory ==="
+          ls -laR output/debug/ 2>/dev/null || echo "output/debug/ not found"
+          echo "=== Checking for review_assets directory ==="
+          ls -laR output/review_assets/ 2>/dev/null || echo "output/review_assets/ not found"
+
       - name: Validate pipeline artifacts and review API
         run: >
           python scripts/ci_smoke.py
@@ -201,7 +212,5 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: integration-artifacts
-          path: |
-            output/result_ci.json
-            output/debug/
-            output/review_assets/
+          path: output/
+          if-no-files-found: warn
