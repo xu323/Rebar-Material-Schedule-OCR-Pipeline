@@ -9,7 +9,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .cnn_dataset import ShapeManifestDataset, load_manifest
-from .cnn_model import ShapeCNN
 from .cnn_transforms import ShapePreprocessConfig
 
 
@@ -41,6 +40,8 @@ def train_shape_cnn(config: TrainShapeCNNConfig) -> dict:
             "Training shape CNN requires torch. Install CPU build of torch."
         ) from exc
 
+    from .cnn_model import ShapeCNN
+
     torch.manual_seed(config.seed)
     manifest = load_manifest(config.manifest_path)
     preprocess_config = ShapePreprocessConfig(image_size=config.image_size)
@@ -61,13 +62,13 @@ def train_shape_cnn(config: TrainShapeCNNConfig) -> dict:
     )
 
     train_loader: DataLoader[ShapeManifestDataset] = DataLoader(
-        train_ds,  # type: ignore[arg-type]
+        train_ds,
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=config.num_workers,
     )
     val_loader: DataLoader[ShapeManifestDataset] = DataLoader(
-        val_ds,  # type: ignore[arg-type]
+        val_ds,
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,

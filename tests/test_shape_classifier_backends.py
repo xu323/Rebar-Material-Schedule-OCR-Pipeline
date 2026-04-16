@@ -7,17 +7,19 @@ import cv2
 import numpy as np
 
 from src.shape_classifier import get_classifier
-from src.shape_classifier.cnn_dataset import ShapeManifestDataset, load_manifest
-from src.shape_classifier.cnn_dataset_builder import (
-    BuildShapeDatasetConfig,
-    build_shape_dataset,
-)
-from src.shape_classifier.cnn_infer import LoadedShapeCNN
-from src.shape_classifier.cnn_model import ShapeCNN
-from src.shape_classifier.cnn_train import TrainShapeCNNConfig, train_shape_cnn
 from src.shape_classifier.cnn_transforms import ShapePreprocessConfig
 
 HAS_TORCH = bool(importlib.util.find_spec("torch"))
+
+if HAS_TORCH:
+    from src.shape_classifier.cnn_dataset import ShapeManifestDataset, load_manifest
+    from src.shape_classifier.cnn_dataset_builder import (
+        BuildShapeDatasetConfig,
+        build_shape_dataset,
+    )
+    from src.shape_classifier.cnn_infer import LoadedShapeCNN
+    from src.shape_classifier.cnn_model import ShapeCNN
+    from src.shape_classifier.cnn_train import TrainShapeCNNConfig, train_shape_cnn
 
 
 def _write_shape(path: Path, kind: str) -> None:
@@ -48,6 +50,7 @@ class ShapeClassifierTemplateTests(unittest.TestCase):
 
             image = cv2.imread(str(shapes_dir / "shape_20.png"), cv2.IMREAD_GRAYSCALE)
             self.assertIsNotNone(image)
+            assert image is not None
             matches = classifier.classify(image)
             self.assertTrue(matches)
             self.assertEqual(matches[0].shape_id, "shape_20")
@@ -209,6 +212,7 @@ class ShapeClassifierBackendTests(unittest.TestCase):
 
             image = cv2.imread(str(shapes_dir / "shape_20.png"), cv2.IMREAD_GRAYSCALE)
             self.assertIsNotNone(image)
+            assert image is not None
             matches = classifier.classify(image)
             self.assertTrue(matches)
             self.assertIn(matches[0].shape_id, {"shape_20", "shape_32"})

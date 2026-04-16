@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 
-from .cnn_model import ShapeCNN
 from .cnn_transforms import (
     ShapePreprocessConfig,
     preprocess_shape_image,
@@ -36,6 +35,8 @@ class LoadedShapeCNN:
             raise ImportError(
                 "Supervised CNN backend requires torch. Install CPU build of torch."
             ) from exc
+
+        from .cnn_model import ShapeCNN
 
         self._torch = torch
         self.device = device

@@ -57,9 +57,9 @@ def _load_cjk_font(size: int = 14) -> ImageFont.FreeTypeFont | ImageFont.ImageFo
             except Exception:
                 continue
     try:
-        font = ImageFont.load_default(size=size)  # type: ignore[assignment]
+        font = ImageFont.load_default(size=size)
     except TypeError:
-        font = ImageFont.load_default()  # type: ignore[assignment]
+        font = ImageFont.load_default()
     _font_cache[size] = font
     return font
 
@@ -768,7 +768,7 @@ def _fit_image(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
         return img
     new_w = max(int(w * scale), 1)
     new_h = max(int(h * scale), 1)
-    return img.resize((new_w, new_h), Image.LANCZOS)  # type: ignore[attr-defined]
+    return img.resize((new_w, new_h), Image.LANCZOS)
 
 
 def _draw_centered_text(
