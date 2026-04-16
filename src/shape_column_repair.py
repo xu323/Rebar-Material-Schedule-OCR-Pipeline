@@ -26,6 +26,7 @@ _SUMMARY_INDICATORS = {"合計", "小計", "總計", "total", "subtotal", "sum"}
 # 1. Repair: split false merges in the shape column
 # ------------------------------------------------------------------
 
+
 def repair_shape_column(
     grid_cells: list[GridCell],
     shape_col_idx: int,
@@ -79,20 +80,24 @@ def repair_shape_column(
             y_e = min(row_y_end[r], gc.bbox.y + gc.bbox.h)
             if y_e - y_s < 5:
                 continue
-            split_cells.append(GridCell(
-                bbox=BBox(x=gc.bbox.x, y=y_s, w=gc.bbox.w, h=y_e - y_s),
-                row=r,
-                col=shape_col_idx,
-                rowspan=1,
-                colspan=1,
-            ))
+            split_cells.append(
+                GridCell(
+                    bbox=BBox(x=gc.bbox.x, y=y_s, w=gc.bbox.w, h=y_e - y_s),
+                    row=r,
+                    col=shape_col_idx,
+                    rowspan=1,
+                    colspan=1,
+                )
+            )
 
         if len(split_cells) >= 2:
             result.extend(split_cells)
-            repair_log.append({
-                "original": gc,
-                "split_cells": split_cells,
-            })
+            repair_log.append(
+                {
+                    "original": gc,
+                    "split_cells": split_cells,
+                }
+            )
         else:
             # Cannot split reliably — keep the original cell
             result.append(gc)
@@ -104,6 +109,7 @@ def repair_shape_column(
 # ------------------------------------------------------------------
 # 2. Validity check: is this cell actually a shape?
 # ------------------------------------------------------------------
+
 
 def is_likely_shape(
     cell_crop: np.ndarray,
@@ -138,9 +144,9 @@ def is_likely_shape(
     if text and ocr_confidence > 0.5:
         cleaned = (
             text.replace(".", "", 1)
-                .replace(",", "")
-                .replace("-", "", 1)
-                .replace(" ", "")
+            .replace(",", "")
+            .replace("-", "", 1)
+            .replace(" ", "")
         )
         if cleaned.isdigit():
             return False
@@ -163,14 +169,9 @@ def is_likely_shape(
         return False  # nearly empty
 
     # --- 4. Component spatial spread ---
-    n_labels, _, stats, _ = cv2.connectedComponentsWithStats(
-        bw, connectivity=8
-    )
+    n_labels, _, stats, _ = cv2.connectedComponentsWithStats(bw, connectivity=8)
     min_area = max(total * 0.003, 8)
-    sig = [
-        i for i in range(1, n_labels)
-        if stats[i, cv2.CC_STAT_AREA] >= min_area
-    ]
+    sig = [i for i in range(1, n_labels) if stats[i, cv2.CC_STAT_AREA] >= min_area]
     if not sig:
         return False
 

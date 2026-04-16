@@ -10,12 +10,19 @@ of ShapeMatch instances.  The pipeline then marks the result as
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NamedTuple
 
 import cv2
 import numpy as np
 
 from src.models import BBox, ShapeMatch
+
 from .base import ShapeClassifier
+
+
+class _PreparedMatch(NamedTuple):
+    primary: np.ndarray
+    regions: list[np.ndarray]
 
 
 class TemplateMatcherClassifier(ShapeClassifier):
@@ -67,8 +74,8 @@ class TemplateMatcherClassifier(ShapeClassifier):
         if prepared is None:
             return []
 
-        primary = prepared["primary"]
-        regions = prepared["regions"]
+        primary = prepared.primary
+        regions = prepared.regions
 
         cell_h, cell_w = primary.shape[:2]
         if cell_h < 5 or cell_w < 5:
@@ -111,7 +118,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
         prepared = self._prepare_for_matching(cell_image)
         if prepared is None:
             return []
-        scores = self._score_templates(prepared["regions"])
+        scores = self._score_templates(prepared.regions)
         ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
         return ranked[:limit]
 
@@ -127,15 +134,13 @@ class TemplateMatcherClassifier(ShapeClassifier):
         else:
             gray = cell_image
         gray = cv2.GaussianBlur(gray, (3, 3), 0)
-        _, bw = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )
+        _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         return bw
 
     def _prepare_for_matching(
         self,
         cell_image: np.ndarray,
-    ) -> dict[str, np.ndarray | list[np.ndarray]] | None:
+    ) -> _PreparedMatch | None:
         cell_bw = self._binarize(cell_image)
         if cell_bw is None:
             return None
@@ -144,7 +149,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
         regions = self._regions_from_binary(cleaned)
         if not regions:
             return None
-        return {"primary": regions[0], "regions": regions}
+        return _PreparedMatch(primary=regions[0], regions=regions)
 
     def _regions_from_binary(self, cell_bw: np.ndarray) -> list[np.ndarray]:
         tight = self._tight_foreground_crop(cell_bw)
@@ -180,9 +185,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
             return {}
 
         valid_regions = [
-            region
-            for region in regions
-            if region is not None and region.size > 0
+            region for region in regions if region is not None and region.size > 0
         ]
         if not valid_regions:
             return {}
@@ -223,9 +226,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
                         (target_w, target_h),
                         interpolation=cv2.INTER_AREA,
                     )
-                    result = cv2.matchTemplate(
-                        region, resized, cv2.TM_CCOEFF_NORMED
-                    )
+                    result = cv2.matchTemplate(region, resized, cv2.TM_CCOEFF_NORMED)
                     _, max_val, _, _ = cv2.minMaxLoc(result)
                     if max_val > best_corr:
                         best_corr = max_val
@@ -245,7 +246,8 @@ class TemplateMatcherClassifier(ShapeClassifier):
             for frac in (0.35, 0.5, 0.65, 0.8, 0.95)
         }
         return tuple(
-            h for h in sorted(set(self.resize_heights).union(dynamic))
+            h
+            for h in sorted(set(self.resize_heights).union(dynamic))
             if 10 <= h <= region_h
         )
 
@@ -259,9 +261,9 @@ class TemplateMatcherClassifier(ShapeClassifier):
         hard_trim_y = min(max(int(round(h * 0.015)), 2), h)
 
         cleaned[:, :hard_trim_x] = 0
-        cleaned[:, max(w - hard_trim_x, 0):] = 0
+        cleaned[:, max(w - hard_trim_x, 0) :] = 0
         cleaned[:hard_trim_y, :] = 0
-        cleaned[max(h - hard_trim_y, 0):, :] = 0
+        cleaned[max(h - hard_trim_y, 0) :, :] = 0
 
         for x in range(min(edge_band_x, w)):
             if np.count_nonzero(cleaned[:, x]) >= h * 0.4:
@@ -346,7 +348,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
         )
         x0 = (canvas_w - dst_w) // 2
         y0 = (canvas_h - dst_h) // 2
-        canvas[y0:y0 + dst_h, x0:x0 + dst_w] = resized
+        canvas[y0 : y0 + dst_h, x0 : x0 + dst_w] = resized
         return canvas
 
     @staticmethod
@@ -440,8 +442,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
         if global_weighted:
             total_weight = sum(weight for weight, _ in global_weighted)
             global_score = (
-                sum(weight * value for weight, value in global_weighted)
-                / total_weight
+                sum(weight * value for weight, value in global_weighted) / total_weight
             )
 
         # Raw template correlation is useful, but it is only a local match:
@@ -464,7 +465,9 @@ class TemplateMatcherClassifier(ShapeClassifier):
         h, w = cell_bw.shape[:2]
         total_area = h * w
 
-        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cell_bw, connectivity=8)
+        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            cell_bw, connectivity=8
+        )
         raw: list[BBox] = []
         min_area = max(int(total_area * self.composite_min_area_ratio), 20)
 
@@ -501,9 +504,7 @@ class TemplateMatcherClassifier(ShapeClassifier):
                 new_y = min(last.y, b.y)
                 new_x2 = max(last_x2, b_x2)
                 new_y2 = max(last.y + last.h, b.y + b.h)
-                merged[-1] = BBox(
-                    x=new_x, y=new_y, w=new_x2 - new_x, h=new_y2 - new_y
-                )
+                merged[-1] = BBox(x=new_x, y=new_y, w=new_x2 - new_x, h=new_y2 - new_y)
             else:
                 merged.append(b)
 

@@ -93,7 +93,9 @@ class LoadedShapeCNN:
             return CNNPredictResult(
                 shape_id=None,
                 confidence=best_score,
-                probabilities={self.idx_to_class[i]: float(p) for i, p in enumerate(probs)},
+                probabilities={
+                    self.idx_to_class[i]: float(p) for i, p in enumerate(probs)
+                },
             )
         return CNNPredictResult(
             shape_id=best_sid,

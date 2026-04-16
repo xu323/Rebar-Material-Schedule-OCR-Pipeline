@@ -20,7 +20,7 @@ class ShapeSample:
 
 
 def load_manifest(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     required = {"samples", "class_to_idx", "idx_to_class"}
     missing = required - set(data.keys())
@@ -45,12 +45,10 @@ class ShapeManifestDataset:
         self.root = manifest_path.parent
         self.manifest = load_manifest(manifest_path)
         self.class_to_idx = {
-            str(k): int(v)
-            for k, v in self.manifest["class_to_idx"].items()
+            str(k): int(v) for k, v in self.manifest["class_to_idx"].items()
         }
         self.idx_to_class = {
-            int(k): str(v)
-            for k, v in self.manifest["idx_to_class"].items()
+            int(k): str(v) for k, v in self.manifest["idx_to_class"].items()
         }
         self.preprocess_config = preprocess_config
         self.augment = augment

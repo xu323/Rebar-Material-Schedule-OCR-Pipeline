@@ -4,6 +4,7 @@ top-3 template scores, and final decision across all pages.
 Usage:
     .venv/Scripts/python scripts/diagnose_shapes.py
 """
+
 from __future__ import annotations
 
 import json
@@ -16,14 +17,14 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.config import PipelineConfig, SHAPES_DIR
+from src.config import PipelineConfig
 from src.models import BBox, GridCell
-from src.shape_column_repair import is_likely_shape
 from src.shape_classifier.template_matcher import TemplateMatcherClassifier
+from src.shape_column_repair import is_likely_shape
 
 
 def load_grid_sidecar(path: Path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     table_bbox = BBox(**data["table_bbox"])
     shape_col_idx = data.get("shape_col_idx")
@@ -57,11 +58,13 @@ def main():
     print("Template dimensions (after tight crop):")
     for sid in sorted(classifier.templates.keys()):
         t = classifier.templates[sid]
-        print(f"  {sid}: {t.shape[1]}x{t.shape[0]} (WxH), fg_pixels={np.count_nonzero(t)}")
+        print(
+            f"  {sid}: {t.shape[1]}x{t.shape[0]} (WxH), fg_pixels={np.count_nonzero(t)}"
+        )
     print()
 
     result_path = ROOT / "output" / "result.json"
-    with open(result_path, "r", encoding="utf-8") as f:
+    with open(result_path, encoding="utf-8") as f:
         doc = json.load(f)
 
     review_assets = ROOT / "output" / "review_assets"
@@ -77,7 +80,9 @@ def main():
         page_img = cv2.imread(str(page_img_path))
 
         for t_idx, table in enumerate(page.get("tables", [])):
-            sidecar_path = review_assets / f"page_{page_idx}" / f"table_{t_idx}_grid.json"
+            sidecar_path = (
+                review_assets / f"page_{page_idx}" / f"table_{t_idx}_grid.json"
+            )
             if not sidecar_path.exists():
                 print(f"[page {page_idx} table {t_idx}] no grid sidecar, skipping")
                 continue
@@ -89,7 +94,10 @@ def main():
 
             print(f"{'='*80}")
             print(f"PAGE {page_idx}  TABLE {t_idx}  shape_col_idx={shape_col_idx}")
-            print(f"table_bbox: x={table_bbox.x} y={table_bbox.y} w={table_bbox.w} h={table_bbox.h}")
+            print(
+                f"table_bbox: x={table_bbox.x} y={table_bbox.y}"
+                f" w={table_bbox.w} h={table_bbox.h}"
+            )
             print(f"{'='*80}")
 
             # Get table crop
@@ -102,7 +110,6 @@ def main():
                 row_types[row["index"]] = row.get("row_type", "data")
 
             # Get expected shape_ids from result.json
-            columns = table.get("columns", [])
             expected_shapes: dict[int, str | None] = {}
             for row in table.get("rows", []):
                 ri = row["index"]
@@ -119,8 +126,7 @@ def main():
 
             # Analyze each shape-column cell
             shape_cells = [
-                gc for gc in grid_cells
-                if gc.col <= shape_col_idx < gc.col + gc.colspan
+                gc for gc in grid_cells if gc.col <= shape_col_idx < gc.col + gc.colspan
             ]
             shape_cells.sort(key=lambda g: g.row)
 
@@ -164,7 +170,7 @@ def main():
 
                 # Prepare cleaned binary for analysis
                 prepared = classifier._prepare_for_matching(cell_crop)
-                cell_bw = prepared["primary"] if prepared is not None else None
+                cell_bw = prepared.primary if prepared is not None else None
                 fg_ratio = 0.0
                 if cell_bw is not None:
                     fg_ratio = np.count_nonzero(cell_bw) / max(cell_bw.size, 1)
@@ -198,7 +204,7 @@ def main():
                     f"rspan={gc.rowspan} "
                     f"fg={fg_ratio:.3f} "
                     f"likely={likely} "
-                    f"ocr=\"{ocr_text[:20]}\"/{ocr_conf:.2f} "
+                    f'ocr="{ocr_text[:20]}"/{ocr_conf:.2f} '
                     f"expected={expected_sid} "
                     f"decided={decided_id}/{decided_conf:.3f}"
                     f"{mark}"

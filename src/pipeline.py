@@ -9,9 +9,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.config import PipelineConfig, DEFAULT_OUTPUT_DIR
+from src.config import PipelineConfig
 from src.models import (
     DocumentResult,
+    GridCell,
     PageResult,
 )
 
@@ -26,17 +27,19 @@ def run_pipeline(
     cnn_checkpoint: Path | None = None,
 ) -> DocumentResult:
     """Execute the full OCR pipeline: PDF -> JSON."""
-    from src.pdf_rasterizer import rasterize_pdf
-    from src.layout_analyzer import analyze_layout
-    from src.table_cell_segmenter import segment_table_cells
-    from src.ocr_engine import init_ocr, recognize_text
-    from src.shape_classifier import get_classifier
     from src.assembler import (
-        assemble_page, document_to_dict,
-        find_column_header_row, classify_rows_from_grid,
+        assemble_page,
+        classify_rows_from_grid,
+        document_to_dict,
+        find_column_header_row,
     )
     from src.debug_visualizer import save_debug_page
-    from src.shape_column_repair import repair_shape_column, is_likely_shape
+    from src.layout_analyzer import analyze_layout
+    from src.ocr_engine import init_ocr, recognize_text
+    from src.pdf_rasterizer import rasterize_pdf
+    from src.shape_classifier import get_classifier
+    from src.shape_column_repair import is_likely_shape, repair_shape_column
+    from src.table_cell_segmenter import segment_table_cells
 
     start = time.time()
     cfg = PipelineConfig(pdf_dpi=dpi, debug=debug)
@@ -84,6 +87,7 @@ def run_pipeline(
             crop = page_img[b.y : b.y + b.h, b.x : b.x + b.w]
             ocr_res = recognize_text(ocr, crop)
             from src.models import NonTableRegion
+
             non_table_results.append(
                 NonTableRegion(bbox=region.bbox, label=region.label, text=ocr_res.text)
             )
@@ -111,7 +115,9 @@ def run_pipeline(
             # Phase 2: Lightweight row classification
             col_header_row = find_column_header_row(grid_cells, cell_contents)
             row_types = classify_rows_from_grid(
-                grid_cells, cell_contents, col_header_row,
+                grid_cells,
+                cell_contents,
+                col_header_row,
             )
 
             # Determine data row start from row classifications
@@ -121,7 +127,9 @@ def run_pipeline(
 
             # Phase 2b: Infer shape column (generic strategy)
             shape_col_idx = _infer_shape_column(
-                grid_cells, cell_contents, table_crop,
+                grid_cells,
+                cell_contents,
+                table_crop,
                 data_start_row=data_start_row,
             )
 
@@ -174,7 +182,8 @@ def run_pipeline(
                     }
 
                 grid_cells, repair_log = repair_shape_column(
-                    grid_cells, shape_col_idx,
+                    grid_cells,
+                    shape_col_idx,
                 )
 
                 # Phase 2.6: Re-OCR repaired (split) cells
@@ -191,9 +200,7 @@ def run_pipeline(
             # Phase 3: Classify valid shape-column cells
             if shape_col_idx is not None:
                 for gc in grid_cells:
-                    covers_shape_col = (
-                        gc.col <= shape_col_idx < gc.col + gc.colspan
-                    )
+                    covers_shape_col = gc.col <= shape_col_idx < gc.col + gc.colspan
                     if not covers_shape_col:
                         continue
                     rt = row_types.get(gc.row, "data")
@@ -250,9 +257,12 @@ def run_pipeline(
 
                     split_cells = entry["split_cells"]
                     best_split_conf = max(
-                        (cell_contents.get((sc.row, sc.col), {})
-                         .get("confidence", 0.0)
-                         for sc in split_cells),
+                        (
+                            cell_contents.get((sc.row, sc.col), {}).get(
+                                "confidence", 0.0
+                            )
+                            for sc in split_cells
+                        ),
                         default=0.0,
                     )
 
@@ -260,7 +270,8 @@ def run_pipeline(
                         # Revert: remove split cells, restore original
                         split_positions = {(sc.row, sc.col) for sc in split_cells}
                         grid_cells = [
-                            gc for gc in grid_cells
+                            gc
+                            for gc in grid_cells
                             if (gc.row, gc.col) not in split_positions
                         ]
                         for sc in split_cells:
@@ -278,19 +289,24 @@ def run_pipeline(
                             }
                             if orig_shape.get("components"):
                                 restored["components"] = [
-                                    {"shape_id": c["shape_id"],
-                                     "confidence": round(c["confidence"], 3)}
+                                    {
+                                        "shape_id": c["shape_id"],
+                                        "confidence": round(c["confidence"], 3),
+                                    }
                                     for c in orig_shape["components"]
                                 ]
                             cell_contents[(orig_gc.row, shape_col_idx)] = restored
                         else:
-                            cell_contents[(orig_gc.row, shape_col_idx)] = (
-                                orig_info["cell_contents_entry"]
-                            )
+                            cell_contents[(orig_gc.row, shape_col_idx)] = orig_info[
+                                "cell_contents_entry"
+                            ]
                         entry["reverted"] = True
 
             table = assemble_page(
-                table_region.bbox, grid_cells, cell_contents, cfg,
+                table_region.bbox,
+                grid_cells,
+                cell_contents,
+                cfg,
                 shape_col_idx=shape_col_idx,
             )
             tables.append(table)
@@ -299,9 +315,17 @@ def run_pipeline(
             if debug:
                 debug_dir = output_path.parent / "debug" / f"page_{page_idx}"
                 save_debug_page(
-                    page_img, regions, table_crop, grid_cells,
-                    cell_contents, shape_col_idx, debug_dir, page_idx, t_idx,
-                    table=table, shapes_dir=cfg.shapes_dir,
+                    page_img,
+                    regions,
+                    table_crop,
+                    grid_cells,
+                    cell_contents,
+                    shape_col_idx,
+                    debug_dir,
+                    page_idx,
+                    t_idx,
+                    table=table,
+                    shapes_dir=cfg.shapes_dir,
                     repair_log=repair_log,
                     non_table_regions=non_table_results,
                 )
@@ -319,11 +343,13 @@ def run_pipeline(
                 shape_col_idx=shape_col_idx,
             )
 
-        pages.append(PageResult(
-            page_index=page_idx,
-            tables=tables,
-            non_table_regions=non_table_results,
-        ))
+        pages.append(
+            PageResult(
+                page_index=page_idx,
+                tables=tables,
+                non_table_regions=non_table_results,
+            )
+        )
 
     # --- 4. Assemble document ---
     elapsed = round(time.time() - start, 2)
@@ -347,6 +373,7 @@ def run_pipeline(
 # ===================================================================
 # Review sidecar — serializes grid metadata for the HITL review UI
 # ===================================================================
+
 
 def _write_grid_sidecar(
     path: Path,
@@ -403,8 +430,6 @@ def _infer_shape_column(
     if not grid_cells:
         return None
 
-    from src.models import GridCell as _GC  # type hint only
-
     n_cols = max(gc.col + gc.colspan for gc in grid_cells)
 
     # --- Strategy 1: keyword hint in header rows ---
@@ -444,9 +469,9 @@ def _infer_shape_column(
             # High-confidence text → not shape
             cleaned = (
                 text.replace(".", "", 1)
-                    .replace(",", "")
-                    .replace("-", "", 1)
-                    .replace(" ", "")
+                .replace(",", "")
+                .replace("-", "", 1)
+                .replace(" ", "")
             )
             if cleaned.isdigit():
                 col_scores[c] -= 1.0
@@ -501,10 +526,7 @@ def _cell_has_drawing_characteristics(cell_crop: np.ndarray) -> bool:
 
     n_labels, _, stats, _ = cv2.connectedComponentsWithStats(bw, connectivity=8)
     min_area = max(h * w * 0.003, 8)
-    sig = [
-        i for i in range(1, n_labels)
-        if stats[i, cv2.CC_STAT_AREA] >= min_area
-    ]
+    sig = [i for i in range(1, n_labels) if stats[i, cv2.CC_STAT_AREA] >= min_area]
     if not sig:
         return False
 

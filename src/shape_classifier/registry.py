@@ -16,7 +16,5 @@ def register(name: str, cls: type[ShapeClassifier]) -> None:
 def get_classifier(name: str, **kwargs: Any) -> ShapeClassifier:
     if name not in _REGISTRY:
         available = ", ".join(sorted(_REGISTRY)) or "(none)"
-        raise KeyError(
-            f"Unknown shape classifier '{name}'. Available: {available}"
-        )
+        raise KeyError(f"Unknown shape classifier '{name}'. Available: {available}")
     return _REGISTRY[name](**kwargs)

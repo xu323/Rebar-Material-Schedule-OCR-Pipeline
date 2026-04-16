@@ -41,23 +41,25 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
-    result = train_shape_cnn(TrainShapeCNNConfig(
-        manifest_path=args.manifest,
-        checkpoint_path=args.out_checkpoint,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        num_workers=args.num_workers,
-        device=args.device,
-        early_stopping_patience=args.patience,
-        image_size=args.image_size,
-        width=args.width,
-        dropout=args.dropout,
-        threshold=args.threshold,
-        seed=args.seed,
-        show_progress=not args.quiet,
-    ))
+    result = train_shape_cnn(
+        TrainShapeCNNConfig(
+            manifest_path=args.manifest,
+            checkpoint_path=args.out_checkpoint,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            num_workers=args.num_workers,
+            device=args.device,
+            early_stopping_patience=args.patience,
+            image_size=args.image_size,
+            width=args.width,
+            dropout=args.dropout,
+            threshold=args.threshold,
+            seed=args.seed,
+            show_progress=not args.quiet,
+        )
+    )
 
     print(f"Checkpoint: {result['checkpoint_path']}")
     print(f"Best epoch: {result['best_epoch']}")

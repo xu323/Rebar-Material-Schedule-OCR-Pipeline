@@ -16,17 +16,16 @@ from src.models import (
     BBox,
     DocumentResult,
     GridCell,
-    NonTableRegion,
     PageResult,
     Table,
     TableRow,
     TableSemantic,
 )
 
-
 # ===================================================================
 # Public API
 # ===================================================================
+
 
 def assemble_page(
     table_bbox: BBox,
@@ -83,7 +82,11 @@ def assemble_page(
 
     # --- Extract generic meta fields ---
     meta_fields = _extract_meta_fields(
-        col_header_row, n_cols, get_text, get_content, cell_to_grid,
+        col_header_row,
+        n_cols,
+        get_text,
+        get_content,
+        cell_to_grid,
     )
 
     # --- Build ALL rows ---
@@ -94,10 +97,11 @@ def assemble_page(
 
         for c in range(n_cols):
             col_name = column_names[c] if c < len(column_names) else f"col_{c}"
-            gc = cell_to_grid.get((r, c))
-            if gc is None:
+            gc_or_none = cell_to_grid.get((r, c))
+            if gc_or_none is None:
                 row_cells[col_name] = {}
                 continue
+            gc = gc_or_none
 
             canonical = (gc.row, gc.col)
             content = dict(cell_contents.get(canonical, {}))
@@ -117,12 +121,14 @@ def assemble_page(
 
             row_cells[col_name] = content
 
-        rows.append(TableRow(
-            index=r,
-            row_type=row_types.get(r, "unknown"),
-            cells=row_cells,
-            merge_info=row_merge_info or None,
-        ))
+        rows.append(
+            TableRow(
+                index=r,
+                row_type=row_types.get(r, "unknown"),
+                cells=row_cells,
+                merge_info=row_merge_info or None,
+            )
+        )
 
     # --- Optional semantic layer ---
     semantic = _build_semantic(meta_fields, column_names, shape_col_idx)
@@ -140,6 +146,7 @@ def assemble_page(
 # ===================================================================
 # Public helpers (used by pipeline before full assembly)
 # ===================================================================
+
 
 def find_column_header_row(
     grid_cells: list[GridCell],
@@ -198,8 +205,12 @@ def classify_rows_from_grid(
 # Internal — row classification
 # ===================================================================
 
+
 def _find_column_header_row(
-    max_row: int, n_cols: int, get_text, cell_to_grid: dict,
+    max_row: int,
+    n_cols: int,
+    get_text,
+    cell_to_grid: dict,
 ) -> int:
     """Find the column-header row using generic heuristics.
 
@@ -242,9 +253,9 @@ def _find_column_header_row(
             # Pure numbers → data row
             cleaned = (
                 text.replace(".", "", 1)
-                    .replace(",", "")
-                    .replace("-", "", 1)
-                    .replace(" ", "")
+                .replace(",", "")
+                .replace("-", "", 1)
+                .replace(" ", "")
             )
             if cleaned.isdigit():
                 score -= 1
@@ -270,8 +281,11 @@ def _find_column_header_row(
 
 
 def _classify_rows(
-    max_row: int, n_cols: int, col_header_row: int,
-    get_text, cell_to_grid: dict,
+    max_row: int,
+    n_cols: int,
+    col_header_row: int,
+    get_text,
+    cell_to_grid: dict,
 ) -> dict[int, str]:
     """Classify each row as meta / col_header / unit / data / summary."""
     classifications: dict[int, str] = {}
@@ -281,7 +295,9 @@ def _classify_rows(
             classifications[r] = "meta"
         elif r == col_header_row:
             classifications[r] = "col_header"
-        elif r == col_header_row + 1 and _is_unit_row(r, n_cols, get_text, cell_to_grid):
+        elif r == col_header_row + 1 and _is_unit_row(
+            r, n_cols, get_text, cell_to_grid
+        ):
             classifications[r] = "unit"
         elif _is_summary_row(r, n_cols, get_text, cell_to_grid):
             classifications[r] = "summary"
@@ -292,7 +308,10 @@ def _classify_rows(
 
 
 def _is_unit_row(
-    r: int, n_cols: int, get_text, cell_to_grid: dict,
+    r: int,
+    n_cols: int,
+    get_text,
+    cell_to_grid: dict,
 ) -> bool:
     """Detect if row *r* is a unit row (e.g. (#), (kg/m), (cm))."""
     for c in range(n_cols):
@@ -312,7 +331,10 @@ _GENERIC_SUMMARY_KW = {"合計", "小計", "總計", "total", "subtotal", "sum"}
 
 
 def _is_summary_row(
-    r: int, n_cols: int, get_text, cell_to_grid: dict,
+    r: int,
+    n_cols: int,
+    get_text,
+    cell_to_grid: dict,
 ) -> bool:
     """Detect summary / totals rows using generic patterns."""
     for c in range(n_cols):
@@ -332,8 +354,12 @@ def _is_summary_row(
 # Internal — meta field extraction
 # ===================================================================
 
+
 def _extract_meta_fields(
-    col_header_row: int, n_cols: int, get_text, get_content,
+    col_header_row: int,
+    n_cols: int,
+    get_text,
+    get_content,
     cell_to_grid: dict,
 ) -> list[dict[str, str]]:
     """Extract key-value pairs from meta rows above the column headers.
@@ -409,9 +435,7 @@ def _build_semantic(
     shape_col_idx: int | None,
 ) -> TableSemantic | None:
     """Build the optional semantic interpretation layer."""
-    header_fields: dict[str, str] = {
-        f["key"]: f["value"] for f in meta_fields
-    }
+    header_fields: dict[str, str] = {f["key"]: f["value"] for f in meta_fields}
 
     shape_col_name = None
     if shape_col_idx is not None and 0 <= shape_col_idx < len(column_names):
@@ -510,8 +534,7 @@ def _table_to_dict(table: Table) -> dict:
                 "index": row.index,
                 "row_type": row.row_type,
                 "cells": {
-                    col: _mark_needs_review(cell)
-                    for col, cell in row.cells.items()
+                    col: _mark_needs_review(cell) for col, cell in row.cells.items()
                 },
                 "merge_info": row.merge_info,
             }

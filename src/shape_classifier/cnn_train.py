@@ -60,14 +60,14 @@ def train_shape_cnn(config: TrainShapeCNNConfig) -> dict:
         seed=config.seed,
     )
 
-    train_loader = DataLoader(
-        train_ds,
+    train_loader: DataLoader[ShapeManifestDataset] = DataLoader(
+        train_ds,  # type: ignore[arg-type]
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=config.num_workers,
     )
-    val_loader = DataLoader(
-        val_ds,
+    val_loader: DataLoader[ShapeManifestDataset] = DataLoader(
+        val_ds,  # type: ignore[arg-type]
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,
@@ -116,14 +116,16 @@ def train_shape_cnn(config: TrainShapeCNNConfig) -> dict:
             phase="val",
             show_progress=config.show_progress,
         )
-        history.append({
-            "epoch": epoch,
-            "train_loss": train_loss,
-            "train_acc": train_acc,
-            "val_loss": val_loss,
-            "val_acc": val_acc,
-            "threshold": config.threshold,
-        })
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": train_loss,
+                "train_acc": train_acc,
+                "val_loss": val_loss,
+                "val_acc": val_acc,
+                "threshold": config.threshold,
+            }
+        )
         if config.show_progress:
             print(
                 f"[epoch {epoch}/{config.epochs}] "
@@ -225,15 +227,21 @@ def _run_epoch(
         correct += int((preds == targets).sum().item())
         total += int(targets.size(0))
         max_probs.extend(
-            zip(max_conf.detach().cpu().tolist(), preds.detach().cpu().tolist())
+            zip(
+                max_conf.detach().cpu().tolist(),
+                preds.detach().cpu().tolist(),
+                strict=False,
+            )
         )
         labels.extend(targets.detach().cpu().tolist())
 
         if show_progress and tqdm is not None:
-            iterator.set_postfix({
-                "loss": f"{(total_loss / max(total, 1)):.4f}",
-                "acc": f"{(correct / max(total, 1)):.4f}",
-            })
+            iterator.set_postfix(
+                {
+                    "loss": f"{(total_loss / max(total, 1)):.4f}",
+                    "acc": f"{(correct / max(total, 1)):.4f}",
+                }
+            )
 
     if total == 0:
         return 0.0, 0.0, [], []

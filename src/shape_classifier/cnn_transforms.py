@@ -72,9 +72,9 @@ def strip_cell_borders(
     hard_trim_y = min(max(int(round(h * config.border_trim_ratio)), 2), h)
 
     cleaned[:, :hard_trim_x] = 0
-    cleaned[:, max(w - hard_trim_x, 0):] = 0
+    cleaned[:, max(w - hard_trim_x, 0) :] = 0
     cleaned[:hard_trim_y, :] = 0
-    cleaned[max(h - hard_trim_y, 0):, :] = 0
+    cleaned[max(h - hard_trim_y, 0) :, :] = 0
 
     for x in range(min(edge_band_x, w)):
         if np.count_nonzero(cleaned[:, x]) >= h * 0.4:
@@ -123,7 +123,9 @@ def tight_foreground_crop(cell_bw: np.ndarray) -> np.ndarray | None:
     if x1 <= x0 or y1 <= y0:
         return None
     pad = max(int(round(min(h, w) * 0.02)), 2)
-    return cell_bw[max(y0 - pad, 0):min(y1 + pad, h), max(x0 - pad, 0):min(x1 + pad, w)]
+    return cell_bw[
+        max(y0 - pad, 0) : min(y1 + pad, h), max(x0 - pad, 0) : min(x1 + pad, w)
+    ]
 
 
 def normalize_binary_to_canvas(
@@ -143,7 +145,7 @@ def normalize_binary_to_canvas(
     resized = cv2.resize(cell_bw, (dst_w, dst_h), interpolation=cv2.INTER_NEAREST)
     x0 = (image_size - dst_w) // 2
     y0 = (image_size - dst_h) // 2
-    canvas[y0:y0 + dst_h, x0:x0 + dst_w] = resized
+    canvas[y0 : y0 + dst_h, x0 : x0 + dst_w] = resized
     return canvas
 
 
@@ -175,7 +177,7 @@ def augment_binary_shape(
         (w, h),
         flags=cv2.INTER_NEAREST,
         borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
+        borderValue=(0,),
     )
 
     morph_roll = float(rng.random())
@@ -190,7 +192,7 @@ def augment_binary_shape(
         _, img = cv2.threshold(img, 32, 255, cv2.THRESH_BINARY)
 
     if rng.random() < 0.3:
-        noise = rng.normal(0, 12, size=img.shape).astype(np.int16)
+        noise = np.asarray(rng.normal(0, 12, size=img.shape)).astype(np.int16)
         noisy = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
         _, img = cv2.threshold(noisy, 32, 255, cv2.THRESH_BINARY)
 
@@ -200,10 +202,10 @@ def augment_binary_shape(
         trim_y = int(round(h * crop_ratio))
         if trim_x > 0:
             img[:, :trim_x] = 0
-            img[:, max(w - trim_x, 0):] = 0
+            img[:, max(w - trim_x, 0) :] = 0
         if trim_y > 0:
             img[:trim_y, :] = 0
-            img[max(h - trim_y, 0):, :] = 0
+            img[max(h - trim_y, 0) :, :] = 0
 
     return img
 

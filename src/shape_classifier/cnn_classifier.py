@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from src.models import ShapeMatch
+
 from .base import ShapeClassifier
 from .cnn_infer import LoadedShapeCNN
 
@@ -33,14 +34,14 @@ class CNNShapeClassifier(ShapeClassifier):
                 "Pass --cnn-checkpoint when using --shape-classifier cnn."
             )
         if not self.checkpoint_path.exists():
-            raise FileNotFoundError(
-                f"CNN checkpoint not found: {self.checkpoint_path}"
-            )
+            raise FileNotFoundError(f"CNN checkpoint not found: {self.checkpoint_path}")
         self._model = LoadedShapeCNN(self.checkpoint_path, device=self.device)
 
     def classify(self, cell_image: np.ndarray) -> list[ShapeMatch]:
         if self._model is None:
-            raise RuntimeError("CNNShapeClassifier.load_templates() must be called first")
+            raise RuntimeError(
+                "CNNShapeClassifier.load_templates() must be called first"
+            )
         result = self._model.predict(
             cell_image,
             threshold=self.threshold,

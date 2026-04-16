@@ -44,7 +44,9 @@ def validate_result_json(result_path: Path) -> dict:
         )
         for table_idx, table in enumerate(page.get("tables", [])):
             saw_table = True
-            _require("bbox" in table, f"missing table bbox on page {page_idx}/{table_idx}")
+            _require(
+                "bbox" in table, f"missing table bbox on page {page_idx}/{table_idx}"
+            )
             _require(
                 isinstance(table.get("columns", []), list),
                 f"table columns must be a list on page {page_idx}/{table_idx}",
@@ -63,14 +65,19 @@ def validate_debug_artifacts(result_path: Path, doc: dict) -> None:
     review_assets_dir = base_dir / "review_assets"
 
     _require(debug_dir.exists(), f"missing debug directory: {debug_dir}")
-    _require(review_assets_dir.exists(), f"missing review_assets directory: {review_assets_dir}")
+    _require(
+        review_assets_dir.exists(),
+        f"missing review_assets directory: {review_assets_dir}",
+    )
 
     for page in doc["pages"]:
         page_idx = int(page["page_index"])
         page_debug_dir = debug_dir / f"page_{page_idx}"
         page_assets_dir = review_assets_dir / f"page_{page_idx}"
         _require(page_debug_dir.exists(), f"missing page debug dir: {page_debug_dir}")
-        _require(page_assets_dir.exists(), f"missing page assets dir: {page_assets_dir}")
+        _require(
+            page_assets_dir.exists(), f"missing page assets dir: {page_assets_dir}"
+        )
         _require(
             (page_debug_dir / "01_layout.png").exists(),
             f"missing layout debug image for page {page_idx}",
@@ -111,7 +118,9 @@ def validate_review_api(result_path: Path) -> None:
 
     if doc["pages"][0].get("tables"):
         response = client.get(f"/api/grid/{first_page_idx}/0")
-        _require(response.status_code == 200, "GET /api/grid/<page>/<table> must return 200")
+        _require(
+            response.status_code == 200, "GET /api/grid/<page>/<table> must return 200"
+        )
         response = client.get(f"/api/rendered/{first_page_idx}/0")
         _require(
             response.status_code == 200,

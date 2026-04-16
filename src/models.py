@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal
 
 
@@ -63,6 +62,7 @@ class TableSemantic:
     Best-effort layer that does not override the raw grid data.
     Consumers may ignore it entirely.
     """
+
     header_fields: dict[str, str] = field(default_factory=dict)
     shape_column_index: int | None = None
     shape_column_name: str | None = None

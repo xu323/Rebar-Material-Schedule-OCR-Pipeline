@@ -76,11 +76,13 @@ def build_shape_dataset(config: BuildShapeDatasetConfig) -> dict:
                 filename = f"{shape_id}_{split}_{i:04d}.png"
                 path = split_dir / filename
                 cv2.imwrite(str(path), image)
-                samples.append({
-                    "image_path": str(path.relative_to(output_dir)),
-                    "shape_id": shape_id,
-                    "split": split,
-                })
+                samples.append(
+                    {
+                        "image_path": str(path.relative_to(output_dir)),
+                        "shape_id": shape_id,
+                        "split": split,
+                    }
+                )
 
     manifest = {
         "version": 1,

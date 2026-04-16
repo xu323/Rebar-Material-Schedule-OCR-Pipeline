@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from src.models import ShapeMatch
+
 from .base import ShapeClassifier
 
 
@@ -21,9 +22,9 @@ class EmbedShapeClassifier(ShapeClassifier):
         model_name: str = "resnet18",
     ) -> None:
         try:
-            import torch  # type: ignore
-            import torchvision  # type: ignore
-            import torchvision.transforms as T  # type: ignore
+            import torch
+            import torchvision
+            import torchvision.transforms as T
         except ImportError as e:  # pragma: no cover
             raise ImportError(
                 "EmbedShapeClassifier requires torch and torchvision. "
@@ -48,18 +49,20 @@ class EmbedShapeClassifier(ShapeClassifier):
         model.to(self.device)
         self._model = model
 
-        self._transform = T.Compose([
-            T.ToPILImage(),
-            T.Resize((224, 224)),
-            T.Grayscale(num_output_channels=3),
-            T.ToTensor(),
-            T.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225],
-            ),
-        ])
+        self._transform = T.Compose(
+            [
+                T.ToPILImage(),
+                T.Resize((224, 224)),
+                T.Grayscale(num_output_channels=3),
+                T.ToTensor(),
+                T.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
+            ]
+        )
 
-        self._template_embeddings: dict[str, "torch.Tensor"] = {}
+        self._template_embeddings: dict[str, torch.Tensor] = {}
 
     def load_templates(self, shapes_dir: Path) -> None:
         self._template_embeddings.clear()
@@ -116,6 +119,10 @@ class EmbedShapeClassifier(ShapeClassifier):
         right = side - w - left
         return cv2.copyMakeBorder(
             img,
-            top, bottom, left, right,
-            cv2.BORDER_CONSTANT, value=(255, 255, 255),
+            top,
+            bottom,
+            left,
+            right,
+            cv2.BORDER_CONSTANT,
+            value=(255, 255, 255),
         )

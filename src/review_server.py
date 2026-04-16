@@ -12,7 +12,6 @@ review UI at http://localhost:5000, and on save writes a corrected
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
@@ -21,10 +20,10 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 from src.config import SHAPES_DIR
 from src.review_renderer import rerender_document
 
-
 # ------------------------------------------------------------------
 # App factory
 # ------------------------------------------------------------------
+
 
 def create_app(
     result_path: Path,
@@ -36,9 +35,7 @@ def create_app(
     """Create a Flask app bound to a specific result JSON file."""
     result_path = result_path.resolve()
     base_dir = result_path.parent
-    review_assets_dir = (
-        review_assets_dir or base_dir / "review_assets"
-    ).resolve()
+    review_assets_dir = (review_assets_dir or base_dir / "review_assets").resolve()
     output_dir = (output_dir or base_dir / "reviewed").resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,15 +70,17 @@ def create_app(
             return original
         if not original.exists():
             return reviewed
-        return reviewed if reviewed.stat().st_mtime >= original.stat().st_mtime else original
+        return (
+            reviewed
+            if reviewed.stat().st_mtime >= original.stat().st_mtime
+            else original
+        )
 
     def current_rendered_image_path(page_idx: int, table_idx: int) -> Path | None:
         """Return the rendered image that matches the current document source."""
         current_doc = current_document_path()
         reviewed_img = (
-            state["output_dir"]
-            / f"page_{page_idx}"
-            / f"table_{table_idx}_rendered.png"
+            state["output_dir"] / f"page_{page_idx}" / f"table_{table_idx}_rendered.png"
         )
         debug_img = (
             state["result_path"].parent
@@ -115,18 +114,20 @@ def create_app(
     def api_result():
         """Return the current result JSON (reviewed version if it exists)."""
         path = current_document_path()
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             doc = json.load(f)
-        return jsonify({
-            "source": str(path),
-            "is_reviewed": path == state["reviewed_path"],
-            "document": doc,
-        })
+        return jsonify(
+            {
+                "source": str(path),
+                "is_reviewed": path == state["reviewed_path"],
+                "document": doc,
+            }
+        )
 
     @app.route("/api/original")
     def api_original():
         """Return the un-edited original JSON (for 'reset' in the UI)."""
-        with open(state["result_path"], "r", encoding="utf-8") as f:
+        with open(state["result_path"], encoding="utf-8") as f:
             return jsonify(json.load(f))
 
     @app.route("/api/page_image/<int:page_idx>")
@@ -173,7 +174,7 @@ def create_app(
 
         # Load the most recent document (reviewed if it exists)
         source_path = current_document_path()
-        with open(source_path, "r", encoding="utf-8") as f:
+        with open(source_path, encoding="utf-8") as f:
             doc = json.load(f)
 
         applied = _apply_edits(doc, edits)
@@ -192,19 +193,26 @@ def create_app(
                 output_dir=state["output_dir"],
             )
         except Exception as exc:  # noqa: BLE001
-            return jsonify({
-                "ok": False,
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "applied_edits": applied,
+                        "reviewed_path": str(state["reviewed_path"]),
+                        "error": f"re-render failed: {exc}",
+                    }
+                ),
+                500,
+            )
+
+        return jsonify(
+            {
+                "ok": True,
                 "applied_edits": applied,
                 "reviewed_path": str(state["reviewed_path"]),
-                "error": f"re-render failed: {exc}",
-            }), 500
-
-        return jsonify({
-            "ok": True,
-            "applied_edits": applied,
-            "reviewed_path": str(state["reviewed_path"]),
-            "rendered": [str(p) for p in rendered_paths],
-        })
+                "rendered": [str(p) for p in rendered_paths],
+            }
+        )
 
     return app
 
@@ -212,6 +220,7 @@ def create_app(
 # ------------------------------------------------------------------
 # Edit application
 # ------------------------------------------------------------------
+
 
 def _resolve_cell_by_column_index(
     table: dict,

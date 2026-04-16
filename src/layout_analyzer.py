@@ -7,7 +7,6 @@ import numpy as np
 
 from src.models import BBox, LayoutRegion
 
-
 # Lazy-loaded model singleton
 _model = None
 
@@ -16,13 +15,12 @@ def _get_model():
     global _model
     if _model is None:
         from paddlex import create_model
+
         _model = create_model("PP-DocLayoutV3")
     return _model
 
 
-def analyze_layout(
-    image: np.ndarray, *, threshold: float = 0.5
-) -> list[LayoutRegion]:
+def analyze_layout(image: np.ndarray, *, threshold: float = 0.5) -> list[LayoutRegion]:
     """Detect layout regions (table, text, title, etc.) in a page image.
 
     Parameters

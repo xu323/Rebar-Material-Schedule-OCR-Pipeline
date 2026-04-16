@@ -41,9 +41,7 @@ class TextLayoutTests(unittest.TestCase):
             (1, 0): {"text": "鋼筋施工圖料單明細表"},
         }
 
-        start, end = _find_nonempty_row_range(
-            2, 1, cell_lookup, cell_contents
-        )
+        start, end = _find_nonempty_row_range(2, 1, cell_lookup, cell_contents)
         self.assertEqual((start, end), (1, 1))
 
 

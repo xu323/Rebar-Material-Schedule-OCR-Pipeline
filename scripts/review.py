@@ -69,10 +69,7 @@ def main() -> None:
         "Reviewed JSON will be written to "
         f"{(args.result.parent / 'result_reviewed.json').resolve()}"
     )
-    print(
-        "Re-rendered images: "
-        f"{(args.result.parent / 'reviewed').resolve()}"
-    )
+    print("Re-rendered images: " f"{(args.result.parent / 'reviewed').resolve()}")
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 

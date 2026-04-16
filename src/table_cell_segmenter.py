@@ -45,8 +45,12 @@ def segment_table_cells(
     v_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel, iterations=2)
 
     # --- Extract line coordinates ---
-    row_ys = _extract_line_positions(h_lines, axis="horizontal", tolerance=cfg.line_cluster_tolerance)
-    col_xs = _extract_line_positions(v_lines, axis="vertical", tolerance=cfg.line_cluster_tolerance)
+    row_ys = _extract_line_positions(
+        h_lines, axis="horizontal", tolerance=cfg.line_cluster_tolerance
+    )
+    col_xs = _extract_line_positions(
+        v_lines, axis="vertical", tolerance=cfg.line_cluster_tolerance
+    )
 
     # Ensure outer borders are present. Snap lines that sit near the edge
     # to the exact edge, otherwise insert a new boundary. Using a larger
@@ -64,26 +68,32 @@ def segment_table_cells(
 
     # --- Detect merged cells via missing-border test ---
     merged_cells = _detect_merges(
-        row_ys, col_xs, h_lines, v_lines, tol=tol,
+        row_ys,
+        col_xs,
+        h_lines,
+        v_lines,
+        tol=tol,
         min_coverage=cfg.merge_border_coverage,
     )
 
     # --- Build GridCells, filtering tiny cells ---
     cells: list[GridCell] = []
-    for (r, c, rowspan, colspan) in merged_cells:
+    for r, c, rowspan, colspan in merged_cells:
         x = col_xs[c]
         y = row_ys[r]
         cell_w = col_xs[c + colspan] - x
         cell_h = row_ys[r + rowspan] - y
         if cell_w < 5 or cell_h < 5:
             continue
-        cells.append(GridCell(
-            bbox=BBox(x=x, y=y, w=cell_w, h=cell_h),
-            row=r,
-            col=c,
-            rowspan=rowspan,
-            colspan=colspan,
-        ))
+        cells.append(
+            GridCell(
+                bbox=BBox(x=x, y=y, w=cell_w, h=cell_h),
+                row=r,
+                col=c,
+                rowspan=rowspan,
+                colspan=colspan,
+            )
+        )
 
     return cells
 
@@ -181,7 +191,7 @@ def _detect_merges(
             out.append((r_min, c_min, rowspan, colspan))
         else:
             # Non-rectangular (L-shape etc.) — fall back to 1×1 cells
-            for (r, c) in group:
+            for r, c in group:
                 out.append((r, c, 1, 1))
 
     # Sort top-to-bottom, left-to-right for deterministic output
@@ -189,9 +199,7 @@ def _detect_merges(
     return out
 
 
-def _ensure_edges(
-    positions: list[int], lo: int, hi: int, edge_tol: int
-) -> list[int]:
+def _ensure_edges(positions: list[int], lo: int, hi: int, edge_tol: int) -> list[int]:
     """Snap near-edge positions to the exact edge, or insert edge if missing."""
     positions = sorted(positions)
     if not positions:

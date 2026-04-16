@@ -19,12 +19,12 @@ from PIL import Image, ImageDraw, ImageFont
 from src.models import BBox, GridCell, LayoutRegion, NonTableRegion
 
 # Colour palette (BGR) — for OpenCV overlays (images 01 & 02)
-COLOR_TABLE = (0, 200, 0)       # green
-COLOR_TEXT = (200, 0, 0)        # blue
-COLOR_TITLE = (0, 0, 200)       # red
-COLOR_OTHER = (0, 200, 200)     # yellow
-COLOR_CELL = (200, 200, 0)      # cyan
-COLOR_SHAPE = (0, 140, 255)     # orange
+COLOR_TABLE = (0, 200, 0)  # green
+COLOR_TEXT = (200, 0, 0)  # blue
+COLOR_TITLE = (0, 0, 200)  # red
+COLOR_OTHER = (0, 200, 200)  # yellow
+COLOR_CELL = (200, 200, 0)  # cyan
+COLOR_SHAPE = (0, 140, 255)  # orange
 
 _LABEL_COLORS: dict[str, tuple[int, int, int]] = {
     "table": COLOR_TABLE,
@@ -34,9 +34,9 @@ _LABEL_COLORS: dict[str, tuple[int, int, int]] = {
 
 # --- CJK font loading ---
 _CJK_FONT_PATHS = [
-    "C:/Windows/Fonts/msjh.ttc",       # Microsoft JhengHei (繁體)
-    "C:/Windows/Fonts/msyh.ttc",       # Microsoft YaHei
-    "C:/Windows/Fonts/simsun.ttc",     # SimSun
+    "C:/Windows/Fonts/msjh.ttc",  # Microsoft JhengHei (繁體)
+    "C:/Windows/Fonts/msyh.ttc",  # Microsoft YaHei
+    "C:/Windows/Fonts/simsun.ttc",  # SimSun
     "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
     "/System/Library/Fonts/PingFang.ttc",
 ]
@@ -57,9 +57,9 @@ def _load_cjk_font(size: int = 14) -> ImageFont.FreeTypeFont | ImageFont.ImageFo
             except Exception:
                 continue
     try:
-        font = ImageFont.load_default(size=size)
+        font = ImageFont.load_default(size=size)  # type: ignore[assignment]
     except TypeError:
-        font = ImageFont.load_default()
+        font = ImageFont.load_default()  # type: ignore[assignment]
     _font_cache[size] = font
     return font
 
@@ -67,6 +67,7 @@ def _load_cjk_font(size: int = 14) -> ImageFont.FreeTypeFont | ImageFont.ImageFo
 # ================================================================
 # Public API
 # ================================================================
+
 
 def save_debug_page(
     page_image: np.ndarray,
@@ -103,28 +104,31 @@ def save_debug_page(
     # 3. Faithful table rendering from raw grid cells
     if shapes_dir is not None:
         rendered = render_faithful_table(
-            grid_cells, cell_contents, shape_col_idx, shapes_dir,
+            grid_cells,
+            cell_contents,
+            shape_col_idx,
+            shapes_dir,
             non_table_regions=non_table_regions,
             table_bbox=table.bbox if table is not None else None,
             row_types=row_types,
         )
-        cv2.imwrite(
-            str(output_dir / f"03_table_{table_idx}_rendered.png"), rendered
-        )
+        cv2.imwrite(str(output_dir / f"03_table_{table_idx}_rendered.png"), rendered)
 
     # 4. Repair verification (only if repairs were made)
     if repair_log:
         repair_vis = _draw_repair_debug(
-            table_crop, repair_log, cell_contents, shapes_dir,
+            table_crop,
+            repair_log,
+            cell_contents,
+            shapes_dir,
         )
-        cv2.imwrite(
-            str(output_dir / f"04_table_{table_idx}_repair.png"), repair_vis
-        )
+        cv2.imwrite(str(output_dir / f"04_table_{table_idx}_repair.png"), repair_vis)
 
 
 # ================================================================
 # Image 03 — Faithful table reconstruction from raw grid cells
 # ================================================================
+
 
 def render_faithful_table(
     grid_cells: list[GridCell],
@@ -162,7 +166,10 @@ def render_faithful_table(
 
     # --- Trim leading/trailing rows that are completely empty ---
     trim_start, trim_end = _find_nonempty_row_range(
-        n_rows, n_cols, cell_lookup, cell_contents,
+        n_rows,
+        n_cols,
+        cell_lookup,
+        cell_contents,
     )
     full_n_rows = n_rows
     n_rows = trim_end - trim_start + 1
@@ -194,7 +201,7 @@ def render_faithful_table(
     avg_h = sum(orig_row_h.values()) // max(len(orig_row_h), 1) or 40
     col_widths_orig = [orig_col_w.get(c, avg_w) for c in range(n_cols)]
     row_heights_all = [orig_row_h.get(r, avg_h) for r in range(full_n_rows)]
-    row_heights_orig = row_heights_all[trim_start:trim_end + 1]
+    row_heights_orig = row_heights_all[trim_start : trim_end + 1]
 
     # --- Scale to target width ---
     target_w = 1400
@@ -224,9 +231,7 @@ def render_faithful_table(
     if row_types is None:
         row_types = _detect_row_types(full_n_rows, n_cols, cell_contents, grid_cells)
     row_types = {
-        r - trim_start: rt
-        for r, rt in row_types.items()
-        if trim_start <= r <= trim_end
+        r - trim_start: rt for r, rt in row_types.items() if trim_start <= r <= trim_end
     }
 
     # --- Font sizing based on the rendered grid scale ---
@@ -234,9 +239,7 @@ def render_faithful_table(
 
     # --- Non-table region space (document title, etc.) ---
     pad = 14
-    title_lines = _collect_render_title_lines(
-        non_table_regions, table_bbox=table_bbox
-    )
+    title_lines = _collect_render_title_lines(non_table_regions, table_bbox=table_bbox)
 
     title_line_h = _font_line_height(fonts["title"]) + 8
     title_h = len(title_lines) * title_line_h + (10 if title_lines else 0)
@@ -255,7 +258,7 @@ def render_faithful_table(
         draw.text((pad, ty), text, fill="#000000", font=f)
         ty += title_line_h
 
-    ox = pad   # table x-offset on canvas
+    ox = pad  # table x-offset on canvas
     oy = title_h + pad  # table y-offset on canvas
 
     # --- Render every cell ---
@@ -266,10 +269,11 @@ def render_faithful_table(
             if (r, c) in drawn:
                 continue
 
-            gc = cell_lookup.get((r, c))
-            if gc is None:
+            gc_or_none = cell_lookup.get((r, c))
+            if gc_or_none is None:
                 drawn.add((r, c))
                 continue
+            gc = gc_or_none
 
             canonical = (gc.row, gc.col)
             if canonical in drawn:
@@ -299,15 +303,25 @@ def render_faithful_table(
             content = cell_contents.get(canonical, {})
 
             if "shape_id" in content:
-                _draw_shape_cell(draw, img, x1, y1, cell_w, cell_h,
-                                 content, shapes_dir, fonts["shape"])
+                _draw_shape_cell(
+                    draw,
+                    img,
+                    x1,
+                    y1,
+                    cell_w,
+                    cell_h,
+                    content,
+                    shapes_dir,
+                    fonts["shape"],
+                )
             else:
                 text = content.get("text", "")
                 if text:
                     rt = row_types.get(render_row, "data")
                     f = _font_for_row_type(rt, fonts)
-                    _draw_fitted_wrapped_text(draw, text, x1 + 4, y1 + 3,
-                                              cell_w - 8, cell_h - 6, f)
+                    _draw_fitted_wrapped_text(
+                        draw, text, x1 + 4, y1 + 3, cell_w - 8, cell_h - 6, f
+                    )
 
     return np.array(img)[..., ::-1]  # RGB -> BGR
 
@@ -441,7 +455,7 @@ def _font_line_height(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
 ) -> int:
     bbox = font.getbbox("測試Ag")
-    return bbox[3] - bbox[1]
+    return int(bbox[3] - bbox[1])
 
 
 def _clamp(value: int, lo: int, hi: int) -> int:
@@ -451,6 +465,7 @@ def _clamp(value: int, lo: int, hi: int) -> int:
 # ================================================================
 # Image 04 — Repair verification
 # ================================================================
+
 
 def _draw_repair_debug(
     table_crop: np.ndarray,
@@ -471,21 +486,31 @@ def _draw_repair_debug(
         # Original merged cell — thick red rectangle
         ob = orig.bbox
         cv2.rectangle(
-            vis, (ob.x, ob.y), (ob.x + ob.w, ob.y + ob.h),
-            (0, 0, 255), 3,
+            vis,
+            (ob.x, ob.y),
+            (ob.x + ob.w, ob.y + ob.h),
+            (0, 0, 255),
+            3,
         )
         cv2.putText(
-            vis, f"ORIG rs={orig.rowspan}",
+            vis,
+            f"ORIG rs={orig.rowspan}",
             (ob.x + 4, ob.y + 20),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 0, 255),
+            2,
         )
 
         # Split cells — green rectangles with classification labels
         for sc in splits:
             sb = sc.bbox
             cv2.rectangle(
-                vis, (sb.x, sb.y), (sb.x + sb.w, sb.y + sb.h),
-                (0, 200, 0), 2,
+                vis,
+                (sb.x, sb.y),
+                (sb.x + sb.w, sb.y + sb.h),
+                (0, 200, 0),
+                2,
             )
 
             content = cell_contents.get((sc.row, sc.col), {})
@@ -500,8 +525,13 @@ def _draw_repair_debug(
                 color = (200, 200, 0)  # cyan
 
             cv2.putText(
-                vis, label, (sb.x + 4, sb.y + sb.h // 2 + 5),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1,
+                vis,
+                label,
+                (sb.x + 4, sb.y + sb.h // 2 + 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                color,
+                1,
             )
 
             # Paste a small template preview if shape was identified
@@ -514,10 +544,13 @@ def _draw_repair_debug(
                     arr = np.array(fitted)[..., ::-1]  # RGB->BGR
                     px = sb.x + sb.w - fitted.width - 4
                     py = sb.y + 4
-                    if (py + arr.shape[0] <= vis.shape[0]
-                            and px + arr.shape[1] <= vis.shape[1]
-                            and px >= 0 and py >= 0):
-                        vis[py:py + arr.shape[0], px:px + arr.shape[1]] = arr
+                    if (
+                        py + arr.shape[0] <= vis.shape[0]
+                        and px + arr.shape[1] <= vis.shape[1]
+                        and px >= 0
+                        and py >= 0
+                    ):
+                        vis[py : py + arr.shape[0], px : px + arr.shape[1]] = arr
 
     return vis
 
@@ -525,6 +558,7 @@ def _draw_repair_debug(
 # ================================================================
 # Rendered-table helpers
 # ================================================================
+
 
 def _detect_row_types(
     n_rows: int,
@@ -556,9 +590,10 @@ def _detect_row_types(
         non_empty = 0
         has_full_span = False
         for c in range(n_cols):
-            gc = cell_lookup.get((r, c))
-            if gc is None:
+            gc_or_none = cell_lookup.get((r, c))
+            if gc_or_none is None:
                 continue
+            gc = gc_or_none
             if gc.colspan >= n_cols - 1 and n_cols > 2:
                 has_full_span = True
                 break
@@ -571,7 +606,12 @@ def _detect_row_types(
             if text.startswith("(") or text.startswith("（"):
                 score -= 2
                 continue
-            cleaned = text.replace(".", "", 1).replace(",", "").replace("-", "", 1).replace(" ", "")
+            cleaned = (
+                text.replace(".", "", 1)
+                .replace(",", "")
+                .replace("-", "", 1)
+                .replace(" ", "")
+            )
             if cleaned.isdigit():
                 score -= 1
                 continue
@@ -590,9 +630,10 @@ def _detect_row_types(
     candidate = col_header_row + 1
     if candidate < n_rows:
         for c in range(n_cols):
-            gc = cell_lookup.get((candidate, c))
-            if gc is None:
+            gc_or_none = cell_lookup.get((candidate, c))
+            if gc_or_none is None:
                 continue
+            gc = gc_or_none
             if gc.row != candidate:
                 continue
             text = get_text(candidate, c)
@@ -618,20 +659,23 @@ def _row_background(row: int, row_types: dict[int, str]) -> str:
     """Return background colour based on row type."""
     rt = row_types.get(row, "data")
     if rt == "meta":
-        return "#E8EEF4"   # metadata rows — light blue
+        return "#E8EEF4"  # metadata rows — light blue
     if rt == "col_header":
-        return "#D0D8E0"   # column headers — gray
+        return "#D0D8E0"  # column headers — gray
     if rt == "unit":
-        return "#E0E4E8"   # unit row — lighter gray
+        return "#E0E4E8"  # unit row — lighter gray
     if rt == "summary":
-        return "#FFF3E0"   # summary rows — light orange
+        return "#FFF3E0"  # summary rows — light orange
     return "#F7F9FB" if row % 2 == 0 else "#FFFFFF"
 
 
 def _draw_shape_cell(
     draw: ImageDraw.ImageDraw,
     canvas: Image.Image,
-    x: int, y: int, w: int, h: int,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
     cell: dict,
     shapes_dir: Path,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
@@ -659,13 +703,18 @@ def _draw_shape_cell(
                 py = y + inner_pad + (img_area_h - fitted.height) // 2
                 canvas.paste(fitted, (px, py))
             else:
-                draw.text((cx + 2, y + img_area_h // 2), "N/A",
-                          fill="#999999", font=font)
+                draw.text(
+                    (cx + 2, y + img_area_h // 2), "N/A", fill="#999999", font=font
+                )
             cx += comp_w
 
         ids = [c.get("shape_id", "?") for c in components]
-        draw.text((x + inner_pad, y + h - label_h - inner_pad),
-                  " + ".join(ids), fill="#E65100", font=font)
+        draw.text(
+            (x + inner_pad, y + h - label_h - inner_pad),
+            " + ".join(ids),
+            fill="#E65100",
+            font=font,
+        )
     else:
         # --- Single shape ---
         tmpl = resolve_template_image(shape_id, shapes_dir)
@@ -675,19 +724,27 @@ def _draw_shape_cell(
             py = y + inner_pad + (img_area_h - fitted.height) // 2
             canvas.paste(fitted, (px, py))
         elif shape_id:
-            draw.text((x + inner_pad, y + img_area_h // 2),
-                      f"missing: {shape_id}", fill="#CC0000", font=font)
+            draw.text(
+                (x + inner_pad, y + img_area_h // 2),
+                f"missing: {shape_id}",
+                fill="#CC0000",
+                font=font,
+            )
         else:
-            _draw_centered_text(draw, "N/A", x, y, w, h - label_h,
-                                font, fill="#999999")
+            _draw_centered_text(draw, "N/A", x, y, w, h - label_h, font, fill="#999999")
 
         label = shape_id if shape_id else "N/A"
-        draw.text((x + inner_pad, y + h - label_h - inner_pad),
-                  label, fill="#E65100", font=font)
+        draw.text(
+            (x + inner_pad, y + h - label_h - inner_pad),
+            label,
+            fill="#E65100",
+            font=font,
+        )
 
 
 def resolve_template_image(
-    shape_id: str | None, shapes_dir: Path,
+    shape_id: str | None,
+    shapes_dir: Path,
 ) -> Image.Image | None:
     """Load the template PNG for *shape_id*, or ``None`` if unavailable."""
     if not shape_id:
@@ -711,24 +768,29 @@ def _fit_image(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
         return img
     new_w = max(int(w * scale), 1)
     new_h = max(int(h * scale), 1)
-    return img.resize((new_w, new_h), Image.LANCZOS)
+    return img.resize((new_w, new_h), Image.LANCZOS)  # type: ignore[attr-defined]
 
 
 def _draw_centered_text(
-    draw: ImageDraw.ImageDraw, text: str,
-    x: int, y: int, w: int, h: int,
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     fill: str = "black",
 ) -> None:
     bbox = draw.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text((x + (w - tw) // 2, y + (h - th) // 2), text,
-              fill=fill, font=font)
+    draw.text((x + (w - tw) // 2, y + (h - th) // 2), text, fill=fill, font=font)
 
 
 def _draw_right_aligned(
-    draw: ImageDraw.ImageDraw, text: str,
-    right_x: int, y: int,
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    right_x: int,
+    y: int,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     fill: str = "black",
 ) -> None:
@@ -737,8 +799,12 @@ def _draw_right_aligned(
 
 
 def _draw_wrapped_text(
-    draw: ImageDraw.ImageDraw, text: str,
-    x: int, y: int, max_w: int, max_h: int,
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    x: int,
+    y: int,
+    max_w: int,
+    max_h: int,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     fill: str = "black",
 ) -> None:
@@ -758,15 +824,17 @@ def _draw_wrapped_text(
                 tw = draw.textbbox((0, 0), display + "…", font=font)[2]
             display += "…"
         draw.text((x, y), display, fill=fill, font=font)
-        y += line_h
+        y += int(line_h)
 
 
 # ================================================================
 # OpenCV overlays (images 01 & 02 — unchanged)
 # ================================================================
 
+
 def _draw_layout(
-    image: np.ndarray, regions: list[LayoutRegion],
+    image: np.ndarray,
+    regions: list[LayoutRegion],
 ) -> np.ndarray:
     vis = image.copy()
     for r in regions:
@@ -775,21 +843,27 @@ def _draw_layout(
         cv2.rectangle(vis, (b.x, b.y), (b.x + b.w, b.y + b.h), color, 3)
         label = f"{r.label} {r.confidence:.2f}"
         cv2.putText(
-            vis, label, (b.x, max(b.y - 6, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
+            vis,
+            label,
+            (b.x, max(b.y - 6, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            color,
+            2,
         )
     return vis
 
 
 def _draw_grid(
-    table_img: np.ndarray, cells: list[GridCell], shape_col: int | None,
+    table_img: np.ndarray,
+    cells: list[GridCell],
+    shape_col: int | None,
 ) -> np.ndarray:
     vis = table_img.copy()
     for gc in cells:
         b = gc.bbox
         covers_shape = (
-            shape_col is not None
-            and gc.col <= shape_col < gc.col + gc.colspan
+            shape_col is not None and gc.col <= shape_col < gc.col + gc.colspan
         )
         is_merged = gc.rowspan > 1 or gc.colspan > 1
         color = COLOR_SHAPE if covers_shape else COLOR_CELL
@@ -799,8 +873,13 @@ def _draw_grid(
         if is_merged:
             label += f" ({gc.rowspan}x{gc.colspan})"
         cv2.putText(
-            vis, label, (b.x + 2, b.y + 14),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, 1,
+            vis,
+            label,
+            (b.x + 2, b.y + 14),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.35,
+            color,
+            1,
         )
     return vis
 
@@ -889,7 +968,7 @@ def _text_width(
     if not text:
         return 0
     bbox = font.getbbox(text)
-    return bbox[2] - bbox[0]
+    return int(bbox[2] - bbox[0])
 
 
 def _font_pixel_size(

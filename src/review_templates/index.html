@@ -426,10 +426,65 @@
     function getPageHighlightElements() {
       return {
         image: document.getElementById("pageImage"),
+        wrapper: document.querySelector(".page-image-wrapper"),
+        pane: document.querySelector(".pane.left"),
         overlay: document.getElementById("pageHighlightOverlay"),
         fill: document.getElementById("pageHighlightFill"),
         stroke: document.getElementById("pageHighlightStroke"),
       };
+    }
+
+    function scrollHighlightIntoView() {
+      const { image, wrapper, pane } = getPageHighlightElements();
+      const bbox = state.pendingHighlight;
+      if (!image || !wrapper || !pane || !bbox) return false;
+      if (!image.complete || !image.naturalWidth || !image.naturalHeight) return false;
+
+      const scaleX = image.clientWidth / image.naturalWidth;
+      const scaleY = image.clientHeight / image.naturalHeight;
+      if (!(scaleX > 0) || !(scaleY > 0)) return false;
+
+      const padding = 24;
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const paneRect = pane.getBoundingClientRect();
+
+      const highlightLeft = pane.scrollLeft + (wrapperRect.left - paneRect.left) + (bbox.x * scaleX);
+      const highlightTop = pane.scrollTop + (wrapperRect.top - paneRect.top) + (bbox.y * scaleY);
+      const highlightWidth = bbox.w * scaleX;
+      const highlightHeight = bbox.h * scaleY;
+      const highlightRight = highlightLeft + highlightWidth;
+      const highlightBottom = highlightTop + highlightHeight;
+
+      let targetScrollLeft = pane.scrollLeft;
+      let targetScrollTop = pane.scrollTop;
+
+      const visibleLeft = pane.scrollLeft + padding;
+      const visibleRight = pane.scrollLeft + pane.clientWidth - padding;
+      const visibleTop = pane.scrollTop + padding;
+      const visibleBottom = pane.scrollTop + pane.clientHeight - padding;
+
+      if (highlightLeft < visibleLeft) {
+        targetScrollLeft = Math.max(0, highlightLeft - padding);
+      } else if (highlightRight > visibleRight) {
+        targetScrollLeft = Math.max(0, highlightRight - pane.clientWidth + padding);
+      }
+
+      if (highlightTop < visibleTop) {
+        targetScrollTop = Math.max(0, highlightTop - padding);
+      } else if (highlightBottom > visibleBottom) {
+        targetScrollTop = Math.max(0, highlightBottom - pane.clientHeight + padding);
+      }
+
+      if (targetScrollLeft === pane.scrollLeft && targetScrollTop === pane.scrollTop) {
+        return true;
+      }
+
+      pane.scrollTo({
+        left: targetScrollLeft,
+        top: targetScrollTop,
+        behavior: "smooth",
+      });
+      return true;
     }
 
     function renderPendingHighlight() {
@@ -458,6 +513,9 @@
         return;
       }
       renderPendingHighlight();
+      window.requestAnimationFrame(() => {
+        scrollHighlightIntoView();
+      });
     }
 
     function hideFocusHighlight(key = null) {
@@ -1182,9 +1240,11 @@
     });
     document.getElementById("pageImage").addEventListener("load", () => {
       renderPendingHighlight();
+      scrollHighlightIntoView();
     });
     window.addEventListener("resize", () => {
       renderPendingHighlight();
+      scrollHighlightIntoView();
     });
 
     void loadResult();

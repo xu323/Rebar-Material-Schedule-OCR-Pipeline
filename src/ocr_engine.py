@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+
 os.environ.setdefault("FLAGS_use_mkldnn", "0")
 
 import cv2
@@ -32,9 +33,7 @@ def init_ocr():
     return _ocr_instance
 
 
-def recognize_text(
-    ocr, image: np.ndarray, *, padding: int = 20
-) -> OCRResult:
+def recognize_text(ocr, image: np.ndarray, *, padding: int = 20) -> OCRResult:
     """Run OCR on a single image region.
 
     Small images are padded with a white border to help detection.
@@ -48,8 +47,13 @@ def recognize_text(
     # Pad small images so PaddleOCR's detector can find text
     if h < 32 or w < 32:
         padded = cv2.copyMakeBorder(
-            image, padding, padding, padding, padding,
-            cv2.BORDER_CONSTANT, value=(255, 255, 255),
+            image,
+            padding,
+            padding,
+            padding,
+            padding,
+            cv2.BORDER_CONSTANT,
+            value=(255, 255, 255),
         )
     else:
         padded = image
@@ -99,9 +103,7 @@ def _recognize_text_from_rgb(
                 line_scores.append(score)
         if line_texts:
             combined_text = "\n".join(line_texts)
-            avg_score = (
-                sum(line_scores) / len(line_scores) if line_scores else 0.0
-            )
+            avg_score = sum(line_scores) / len(line_scores) if line_scores else 0.0
             return OCRResult(text=combined_text, confidence=avg_score)
 
     texts = [det["text"] for det in detections if det["text"]]
@@ -119,7 +121,7 @@ def _extract_detections(raw_results: list[dict]) -> list[dict]:
         rec_texts = item.get("rec_texts", [])
         rec_scores = item.get("rec_scores", [])
         polys = item.get("dt_polys", [])
-        for idx, (t, s) in enumerate(zip(rec_texts, rec_scores)):
+        for idx, (t, s) in enumerate(zip(rec_texts, rec_scores, strict=False)):
             text = str(t).strip()
             if not text:
                 continue
@@ -139,17 +141,19 @@ def _extract_detections(raw_results: list[dict]) -> list[dict]:
                     y0 = int(np.floor(ys.min()))
                     x1 = int(np.ceil(xs.max()))
                     y1 = int(np.ceil(ys.max()))
-                    det.update({
-                        "has_box": True,
-                        "x0": x0,
-                        "y0": y0,
-                        "x1": x1,
-                        "y1": y1,
-                        "cx": (x0 + x1) / 2.0,
-                        "cy": (y0 + y1) / 2.0,
-                        "w": max(x1 - x0, 1),
-                        "h": max(y1 - y0, 1),
-                    })
+                    det.update(
+                        {
+                            "has_box": True,
+                            "x0": x0,
+                            "y0": y0,
+                            "x1": x1,
+                            "y1": y1,
+                            "cx": (x0 + x1) / 2.0,
+                            "cy": (y0 + y1) / 2.0,
+                            "w": max(x1 - x0, 1),
+                            "h": max(y1 - y0, 1),
+                        }
+                    )
             detections.append(det)
     return detections
 
@@ -169,38 +173,33 @@ def _group_detections_into_lines(detections: list[dict]) -> list[list[dict]]:
             ref_h = max(det["h"], line_h)
             vertical_overlap = min(det["y1"], line["y1"]) - max(det["y0"], line["y0"])
             center_delta = abs(det["cy"] - line["cy"])
-            if (
-                vertical_overlap >= ref_h * 0.35
-                or center_delta <= ref_h * 0.45
-            ):
+            if vertical_overlap >= ref_h * 0.35 or center_delta <= ref_h * 0.45:
                 assigned = line
                 break
 
         if assigned is None:
-            lines.append({
-                "items": [det],
-                "x0": det["x0"],
-                "y0": det["y0"],
-                "x1": det["x1"],
-                "y1": det["y1"],
-                "cy": det["cy"],
-            })
+            lines.append(
+                {
+                    "items": [det],
+                    "x0": det["x0"],
+                    "y0": det["y0"],
+                    "x1": det["x1"],
+                    "y1": det["y1"],
+                    "cy": det["cy"],
+                }
+            )
         else:
             assigned["items"].append(det)
             assigned["x0"] = min(assigned["x0"], det["x0"])
             assigned["y0"] = min(assigned["y0"], det["y0"])
             assigned["x1"] = max(assigned["x1"], det["x1"])
             assigned["y1"] = max(assigned["y1"], det["y1"])
-            assigned["cy"] = (
-                sum(item["cy"] for item in assigned["items"]) /
-                len(assigned["items"])
+            assigned["cy"] = sum(item["cy"] for item in assigned["items"]) / len(
+                assigned["items"]
             )
 
     lines.sort(key=lambda line: (line["cy"], line["x0"]))
-    return [
-        sorted(line["items"], key=lambda det: det["x0"])
-        for line in lines
-    ]
+    return [sorted(line["items"], key=lambda det: det["x0"]) for line in lines]
 
 
 def _recognize_line(
@@ -232,7 +231,7 @@ def _recognize_line(
 
 
 def _line_has_joinable_boxes(line: list[dict]) -> bool:
-    for left, right in zip(line, line[1:]):
+    for left, right in zip(line, line[1:], strict=False):
         gap = right["x0"] - left["x1"]
         ref_h = max(left["h"], right["h"], 1)
         if gap <= ref_h * 0.6:

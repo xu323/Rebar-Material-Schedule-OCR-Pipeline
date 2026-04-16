@@ -15,6 +15,7 @@ import cv2
 from src.shape_classifier.cnn_dataset import load_manifest
 from src.shape_classifier.cnn_infer import LoadedShapeCNN
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate supervised CNN shape classifier"
@@ -51,12 +52,15 @@ def main() -> None:
     if not args.quiet:
         try:
             from tqdm import tqdm
+
             iterator = tqdm(samples, desc=f"eval {args.split}", file=sys.stdout)
         except ImportError:
             iterator = samples
 
     for sample in iterator:
-        image = cv2.imread(str((root / sample["image_path"]).resolve()), cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(
+            str((root / sample["image_path"]).resolve()), cv2.IMREAD_GRAYSCALE
+        )
         if image is None:
             raise FileNotFoundError(sample["image_path"])
         pred = model.predict(

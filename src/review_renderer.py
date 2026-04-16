@@ -16,13 +16,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.models import BBox, GridCell, NonTableRegion
 from src.debug_visualizer import render_faithful_table
+from src.models import BBox, GridCell, NonTableRegion
 
 
 def load_grid_sidecar(path: Path) -> tuple[list[GridCell], BBox, int | None]:
     """Load grid metadata previously written by the pipeline."""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     table_bbox = BBox(**data["table_bbox"])
     shape_col_idx = data.get("shape_col_idx")
@@ -50,10 +50,7 @@ def cell_contents_from_table_dict(
     We iterate grid cells and pull the matching entry from the JSON row
     using the column name at index ``gc.col``.
     """
-    columns = table_dict.get("columns", [])
-    rows_by_index: dict[int, dict] = {
-        r["index"]: r for r in table_dict.get("rows", [])
-    }
+    rows_by_index: dict[int, dict] = {r["index"]: r for r in table_dict.get("rows", [])}
 
     cell_contents: dict[tuple[int, int], dict] = {}
     for gc in grid_cells:
@@ -97,16 +94,18 @@ def non_table_regions_from_dict(
     out: list[NonTableRegion] = []
     for ntr in page_dict.get("non_table_regions", []) or []:
         b = ntr.get("bbox") or {}
-        out.append(NonTableRegion(
-            bbox=BBox(
-                x=int(b.get("x", 0)),
-                y=int(b.get("y", 0)),
-                w=int(b.get("w", 0)),
-                h=int(b.get("h", 0)),
-            ),
-            label=ntr.get("label", ""),
-            text=ntr.get("text", ""),
-        ))
+        out.append(
+            NonTableRegion(
+                bbox=BBox(
+                    x=int(b.get("x", 0)),
+                    y=int(b.get("y", 0)),
+                    w=int(b.get("w", 0)),
+                    h=int(b.get("h", 0)),
+                ),
+                label=ntr.get("label", ""),
+                text=ntr.get("text", ""),
+            )
+        )
     return out
 
 
@@ -122,8 +121,7 @@ def rerender_table(
     non_table_regions = non_table_regions_from_dict(page_dict)
 
     row_types = {
-        row["index"]: row.get("row_type", "data")
-        for row in table_dict.get("rows", [])
+        row["index"]: row.get("row_type", "data") for row in table_dict.get("rows", [])
     }
 
     return render_faithful_table(
@@ -149,7 +147,7 @@ def rerender_document(
     ``output_dir/page_<i>/table_<j>_rendered.png`` and returns the list
     of written paths.
     """
-    with open(reviewed_json_path, "r", encoding="utf-8") as f:
+    with open(reviewed_json_path, encoding="utf-8") as f:
         doc = json.load(f)
 
     written: list[Path] = []
